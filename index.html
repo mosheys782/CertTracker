@@ -1,0 +1,2153 @@
+<!DOCTYPE html>
+<!-- CertTracker v1 - Certificate & Endorsement Request Management -->
+<!-- Production Build — SharePoint + Front App + AMS360 -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>CertTracker</title>
+    <script>
+    // ONE-TIME FORCE REFRESH
+    var FORCE_REFRESH_VERSION = 1;
+    (function(){
+        var key = 'ct_force_refresh_v';
+        var lastForced = localStorage.getItem(key);
+        if(!lastForced || parseInt(lastForced) < FORCE_REFRESH_VERSION){
+            localStorage.setItem(key, FORCE_REFRESH_VERSION);
+            if(location.search.indexOf('_forceRefresh=') === -1){
+                location.replace(location.pathname + '?_forceRefresh=' + FORCE_REFRESH_VERSION + '&_t=' + Date.now());
+            }
+        }
+    })();
+    </script>
+    <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(180deg,#f8fafc 0%,#e2e8f0 100%);min-height:100vh;font-size:14px;color:#1e293b}
+        .hidden{display:none !important}
+        .app{display:none;padding:24px;max-width:1500px;margin:0 auto}
+
+        /* ═══ LOGIN ═══ */
+        .login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%)}
+        .login-card{background:#fff;padding:48px;border-radius:16px;text-align:center;box-shadow:0 25px 50px rgba(0,0,0,0.25);max-width:400px;width:100%;margin:20px}
+        .login-card h1{font-size:24px;margin-bottom:8px;color:#1e293b;font-weight:700}
+        .login-card p{color:#64748b;margin-bottom:32px;font-size:14px}
+        .login-btn{background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%);color:#fff;border:none;padding:14px 32px;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;transition:all 0.2s;width:100%}
+        .login-btn:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(59,130,246,0.4)}
+
+        /* ═══ HEADER ═══ */
+        .header{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff;padding:24px 32px;border-radius:12px;margin-bottom:24px;display:none;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+        .header.visible{display:flex}
+        .header-left h1{font-size:24px;font-weight:700;display:flex;align-items:center;gap:12px;margin:0}
+        .header-left p{margin:4px 0 0;opacity:0.8;font-size:13px}
+        .header-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+        .header-welcome{font-size:14px;opacity:0.9}
+        .search-box{position:relative}
+        .search-box input{padding:10px 16px 10px 36px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);width:220px;font-size:13px;background:rgba(255,255,255,0.1);color:#fff;font-family:inherit}
+        .search-box input::placeholder{color:rgba(255,255,255,0.5)}
+        .search-box:before{content:'🔍';position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px}
+        .hdr-btn{padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px}
+        .hdr-btn:hover{background:rgba(255,255,255,0.2)}
+        .hdr-btn.primary{background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%);border:none;font-weight:600}
+        .hdr-btn.primary:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,0.4)}
+        .signout-btn{padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-size:13px;transition:all 0.2s}
+        .signout-btn:hover{background:rgba(255,255,255,0.2)}
+        .notif-bell{position:relative}
+        .notif-bell .badge{position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #1e293b}
+
+        /* ═══ SLA BANNER ═══ */
+        .sla-banner{background:#fff;border-radius:12px;padding:18px 24px;margin-bottom:20px;display:flex;align-items:center;gap:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);flex-wrap:wrap}
+        .sla-item{display:flex;align-items:center;gap:10px}
+        .sla-item .sla-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+        .sla-item .sla-label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px}
+        .sla-item .sla-val{font-size:18px;font-weight:700}
+        .sla-divider{width:1px;height:36px;background:#e2e8f0}
+
+        /* ═══ STAT CARDS ═══ */
+        .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px}
+        .stat{background:#fff;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.1);cursor:pointer;transition:all 0.2s;border-left:4px solid}
+        .stat:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,0.1)}
+        .stat.active{box-shadow:0 0 0 2px #3b82f6,0 8px 25px rgba(0,0,0,0.1)}
+        .stat-info .label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px}
+        .stat-info .num{font-size:26px;font-weight:700}
+        .stat-icon{font-size:24px;opacity:0.8}
+        .stat.red{border-left-color:#ef4444}.stat.red .num{color:#ef4444}
+        .stat.purple{border-left-color:#7c3aed}.stat.purple .num{color:#7c3aed}
+        .stat.yellow{border-left-color:#eab308}.stat.yellow .num{color:#eab308}
+        .stat.orange{border-left-color:#f97316}.stat.orange .num{color:#f97316}
+        .stat.gray{border-left-color:#6b7280}.stat.gray .num{color:#6b7280}
+        .stat.teal{border-left-color:#14b8a6}.stat.teal .num{color:#14b8a6}
+        .stat.blue{border-left-color:#3b82f6}.stat.blue .num{color:#3b82f6}
+        .stat.green{border-left-color:#22c55e}.stat.green .num{color:#22c55e}
+        .stat.rose{border-left-color:#ec4899}.stat.rose .num{color:#ec4899}
+        .stat.sky{border-left-color:#0ea5e9}.stat.sky .num{color:#0ea5e9}
+
+        /* ═══ TABS ═══ */
+        .tabs-container{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px}
+        .tab-row{display:flex;border-bottom:1px solid #e5e7eb;padding:0 8px;flex-wrap:wrap}
+        .tab{padding:14px 20px;cursor:pointer;border-bottom:2px solid transparent;font-weight:500;font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px;transition:all 0.15s}
+        .tab:hover{color:#3b82f6;background:#f8fafc}
+        .tab.active{color:#3b82f6;border-bottom-color:#3b82f6}
+        .tab .count{background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#64748b}
+        .tab.active .count{background:#dbeafe;color:#3b82f6}
+
+        /* ═══ FILTERS ═══ */
+        .filters{padding:14px 20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;background:#f9fafb;border-top:1px solid #e5e7eb}
+        .filters select{padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;min-width:140px;cursor:pointer;background:#fff;color:#334155;font-family:inherit}
+        .filters select:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.1)}
+        .filters label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:#475569}
+        .filters label input{width:16px;height:16px;accent-color:#3b82f6}
+        .clear-btn{padding:8px 14px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#64748b;font-size:13px;cursor:pointer;font-family:inherit;display:none;align-items:center;gap:6px}
+        .clear-btn:hover{background:#fee2e2;border-color:#fca5a5;color:#dc2626}
+        .clear-btn.visible{display:inline-flex}
+        .active-filters{display:flex;flex-wrap:wrap;gap:8px;padding:12px 20px;background:#eff6ff;border-top:1px solid #bfdbfe;align-items:center}
+        .active-filters:empty{display:none;padding:0}
+        .active-filters-label{font-size:12px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+        .filter-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e40af}
+        .filter-tag .remove{cursor:pointer;color:#64748b;font-weight:bold}
+        .filter-tag .remove:hover{color:#dc2626}
+
+        /* ═══ TABLE ═══ */
+        .grid{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden}
+        .grid-table{width:100%;border-collapse:collapse}
+        .grid-table thead tr{background:#f9fafb}
+        .grid-table th{padding:14px 16px;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;text-align:left;white-space:nowrap;border-bottom:1px solid #e5e7eb}
+        .grid-table th:first-child{padding-left:24px}
+        .grid-table td{padding:14px 16px;border-bottom:1px solid #e5e7eb;vertical-align:middle}
+        .grid-table td:first-child{padding-left:24px}
+        .grid-table tbody tr{transition:all 0.15s}
+        .grid-table tbody tr:nth-child(even){background:#f9fafb}
+        .grid-table tbody tr:hover td{background:#f1f5f9}
+
+        /* Request cell */
+        .req-cell{display:flex;gap:14px;align-items:flex-start;min-width:200px}
+        .req-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+        .req-info{min-width:0;flex:1}
+        .req-info .type-badge{display:inline-block;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:600;margin-bottom:4px}
+        .req-info .type-badge.cert{background:#dbeafe;color:#2563eb}
+        .req-info .type-badge.endorsement{background:#fef3c7;color:#d97706}
+        .req-info .type-badge.addl-insured{background:#ede9fe;color:#7c3aed}
+        .req-info .type-badge.waiver{background:#fce7f3;color:#db2777}
+        .req-info h3{font-size:14px;font-weight:500;margin-bottom:3px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+        .req-info .ref-id{font-size:10px;color:#94a3b8;font-family:monospace;letter-spacing:0.5px}
+        .notif-dots{display:flex;gap:4px;margin-top:4px}
+        .notif-dot{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;animation:pulse 2s infinite}
+        .notif-dot.customer{background:#dbeafe;color:#2563eb}
+        .notif-dot.carrier{background:#fff7ed;color:#ea580c}
+        .notif-dot.sla{background:#fef2f2;color:#dc2626}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.7}}
+
+        /* Status / Assignee / Due badges */
+        .status-cell{position:relative;text-align:center}
+        .status-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all 0.15s}
+        .status-badge:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+        .status-dd{position:fixed;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,0.12);z-index:1000;min-width:200px;max-height:320px;overflow-y:auto}
+        .status-opt{padding:10px 14px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:10px}
+        .status-opt:hover{background:#f8fafc}
+        .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+        .assignee-cell{text-align:center}
+        .assignee-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:50px;font-size:12px;cursor:pointer;font-weight:500;transition:all 0.15s;background:#f8fafc;border:1px solid #e2e8f0;color:#374151}
+        .assignee-badge:hover{background:#f1f5f9;border-color:#cbd5e1}
+        .assignee-badge .init{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0}
+        .assignee-badge .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px}
+        .assignee-dd{position:fixed;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,0.12);z-index:1000;width:280px}
+        .assignee-dd input{width:100%;padding:10px 14px;border:none;border-bottom:1px solid #e5e7eb;font-size:13px;outline:none;border-radius:8px 8px 0 0;font-family:inherit}
+        .assignee-list{max-height:260px;overflow-y:auto}
+        .assignee-opt{padding:10px 14px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:10px}
+        .assignee-opt:hover{background:#f8fafc}
+        .assignee-opt .avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff}
+        .deadline-cell{text-align:center}
+        .due-badge{display:inline-block;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap}
+        .due-badge.past{background:#fef2f2;color:#dc2626}
+        .due-badge.today{background:#fefce8;color:#ca8a04}
+        .due-badge.tomorrow{background:#fff7ed;color:#ea580c}
+        .due-badge.week{background:#eff6ff;color:#2563eb}
+        .due-badge.future{background:#f1f5f9;color:#64748b}
+        .due-badge.none{background:#f1f5f9;color:#94a3b8}
+        .due-date{font-size:12px;color:#6b7280;margin-top:4px}
+        .age-cell{text-align:center}
+        .age-pill{display:inline-block;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600}
+        .age-pill.green{background:#dcfce7;color:#16a34a}
+        .age-pill.yellow{background:#fef9c3;color:#a16207}
+        .age-pill.red{background:#fef2f2;color:#dc2626}
+        .cust-cell .cust-name{font-size:13px;font-weight:600;color:#111827}
+        .cust-cell .ams-link{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#7c3aed;text-decoration:none;font-weight:500;margin-top:2px}
+        .cust-cell .ams-link:hover{text-decoration:underline}
+        .action-btn{background:#dbeafe;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:14px;transition:all 0.15s;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px}
+        .action-btn:hover{background:#bfdbfe}
+        .front-btn{background:#e0e7ff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:14px;transition:all 0.15s;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px}
+        .front-btn:hover{background:#c7d2fe}
+
+        /* Pagination */
+        .pagination{padding:14px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#6b7280}
+        .pagination-left{display:flex;align-items:center;gap:16px}
+        .page-size-select{display:flex;align-items:center;gap:8px}
+        .page-size-select select{padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;cursor:pointer;background:#fff}
+        .page-btn{padding:6px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;transition:all 0.15s;font-family:inherit}
+        .page-btn.active{background:#3b82f6;color:#fff;border-color:#3b82f6}
+        .page-btn:hover:not(.active):not(:disabled){border-color:#3b82f6;color:#3b82f6}
+        .page-btn:disabled{opacity:0.4;cursor:not-allowed}
+
+        /* ═══ PANEL ═══ */
+        .panel-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);z-index:100;display:none}
+        .panel-bg.open{display:block}
+        .panel{position:fixed;top:0;right:-620px;width:620px;height:100%;background:#fff;z-index:101;transition:right 0.25s ease;display:flex;flex-direction:column;box-shadow:-4px 0 25px rgba(0,0,0,0.15)}
+        .panel.open{right:0}
+        .panel-header{padding:20px 24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+        .panel-header h2{font-size:18px;font-weight:600;color:#111827;margin:0}
+        .panel-close{width:32px;height:32px;border:none;background:#f1f5f9;border-radius:6px;font-size:18px;cursor:pointer;color:#6b7280}
+        .panel-close:hover{background:#e2e8f0}
+        .panel-body{flex:1;overflow-y:auto;padding:24px}
+        .panel-footer{padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;gap:12px;justify-content:flex-end;background:#f9fafb}
+        .section{margin-bottom:24px}
+        .section h3{font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+        .field{margin-bottom:14px}
+        .field label{display:block;font-size:13px;color:#374151;margin-bottom:6px;font-weight:500}
+        .field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-family:inherit;color:#111827}
+        .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.1)}
+        .field textarea{min-height:80px;resize:vertical}
+        .btn{padding:10px 20px;border-radius:8px;font-size:14px;cursor:pointer;font-weight:500;transition:all 0.15s;font-family:inherit}
+        .btn-cancel{background:#fff;border:1px solid #d1d5db;color:#374151}
+        .btn-cancel:hover{background:#f9fafb}
+        .btn-save{background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%);color:#fff;border:none}
+        .btn-save:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,0.4)}
+
+        /* Conversation cards */
+        .conv-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:12px}
+        .conv-card.customer{border-left:4px solid #3b82f6}
+        .conv-card.carrier{border-left:4px solid #f97316}
+        .conv-card.unread.customer{background:#eff6ff;border-color:#93c5fd;border-left-color:#3b82f6}
+        .conv-card.unread.carrier{background:#fff7ed;border-color:#fed7aa;border-left-color:#f97316}
+        .conv-card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+        .conv-card-type{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px}
+        .conv-card-type.customer{background:#dbeafe;color:#2563eb}
+        .conv-card-type.carrier{background:#fff7ed;color:#ea580c}
+        .conv-card-unread-dot{width:8px;height:8px;border-radius:50%;animation:pulse 2s infinite}
+        .conv-card-unread-dot.customer{background:#3b82f6}
+        .conv-card-unread-dot.carrier{background:#f97316}
+        .conv-card-subject{font-size:13px;font-weight:600;color:#111827;margin-bottom:6px}
+        .conv-card-meta{font-size:12px;color:#6b7280;margin-bottom:4px}
+        .conv-card-meta strong{color:#374151}
+        .conv-card-footer{display:flex;justify-content:space-between;align-items:center;gap:8px}
+        .conv-card-stats{display:flex;gap:12px;font-size:11px;color:#94a3b8}
+        .conv-card-stats span{display:flex;align-items:center;gap:4px}
+        .conv-open-btn{background:#e0e7ff;border:1px solid #c7d2fe;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer;color:#4338ca;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
+        .conv-open-btn:hover{background:#c7d2fe}
+        .link-carrier-section{background:#f9fafb;border:2px dashed #d1d5db;border-radius:10px;padding:16px;text-align:center;margin-top:8px;cursor:pointer;transition:all 0.15s}
+        .link-carrier-section:hover{border-color:#3b82f6;background:#eff6ff}
+
+        /* Timeline */
+        .timeline-item{display:flex;gap:12px;padding:10px 0;border-left:2px solid #e2e8f0;margin-left:8px;padding-left:16px;position:relative}
+        .timeline-item:before{content:'';position:absolute;left:-5px;top:14px;width:8px;height:8px;border-radius:50%;background:#3b82f6;border:2px solid #fff}
+        .timeline-item.customer:before{background:#2563eb}
+        .timeline-item.carrier:before{background:#f97316}
+        .timeline-item.system:before{background:#6b7280}
+        .timeline-item.status:before{background:#22c55e}
+        .timeline-time{font-size:11px;color:#94a3b8;white-space:nowrap;min-width:70px}
+        .timeline-content{font-size:13px;color:#374151;flex:1}
+
+        /* Loading & Toast */
+        .loading{text-align:center;padding:60px;color:#6b7280}
+        .spinner{width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .toast{position:fixed;bottom:24px;right:24px;background:#1e293b;color:#fff;padding:14px 20px;border-radius:8px;display:none;z-index:200;font-weight:500;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,0.2)}
+        .toast.show{display:flex;align-items:center;gap:8px}
+        .toast.ok{background:#22c55e}
+        .toast.err{background:#ef4444}
+        .footer{text-align:center;padding:24px;color:#6b7280;font-size:13px}
+
+        @media(max-width:1200px){.stats{grid-template-columns:repeat(5,1fr)}}
+        @media(max-width:1000px){.stats{grid-template-columns:repeat(3,1fr)}.header{flex-direction:column;text-align:center}.header-right{flex-wrap:wrap;justify-content:center}}
+        @media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}}
+    </style>
+</head>
+<body>
+    <!-- LOGIN -->
+    <div id="login" class="login-screen">
+        <div class="login-card">
+            <h1>📜 CertTracker</h1>
+            <p>Certificate & Endorsement Request Management</p>
+            <button class="login-btn" onclick="signIn()">Sign In with Microsoft</button>
+        </div>
+    </div>
+
+    <!-- APP -->
+    <div id="app" class="app">
+        <header id="appHeader" class="header">
+            <div class="header-left">
+                <h1>📜 CertTracker</h1>
+                <p>Certificate & Endorsement Request Management</p>
+            </div>
+            <div class="header-right">
+                <span class="header-welcome">Welcome, <span id="userName">User</span></span>
+                <div class="search-box"><input type="text" id="globalSearch" placeholder="Search requests..." oninput="applyFilters()"></div>
+                <button class="hdr-btn notif-bell" onclick="toggleNotifFilter()" title="Notifications">🔔 <span class="badge" id="notifBadge" style="display:none">0</span></button>
+                <button class="hdr-btn" onclick="refreshData()" title="Refresh data">🔄</button>
+                <button class="hdr-btn" onclick="importFromFront()" title="Import from Front" id="importFrontBtn">📥 Import</button>
+                <button class="hdr-btn primary" onclick="openNewRequest()">+ New Request</button>
+                <button class="signout-btn" onclick="signOut()">Sign Out</button>
+            </div>
+        </header>
+
+        <!-- SLA Banner -->
+        <div class="sla-banner">
+            <div class="sla-item"><div class="sla-icon" style="background:#dbeafe;color:#2563eb">⏱️</div><div><div class="sla-label">Avg Turnaround</div><div class="sla-val" id="slaAvg" style="color:#2563eb">—</div></div></div>
+            <div class="sla-divider"></div>
+            <div class="sla-item"><div class="sla-icon" style="background:#dcfce7;color:#16a34a">✅</div><div><div class="sla-label">Completed Today</div><div class="sla-val" id="slaToday" style="color:#16a34a">0</div></div></div>
+            <div class="sla-divider"></div>
+            <div class="sla-item"><div class="sla-icon" style="background:#fef3c7;color:#d97706">📊</div><div><div class="sla-label">This Week</div><div class="sla-val" id="slaWeek" style="color:#d97706">0</div></div></div>
+            <div class="sla-divider"></div>
+            <div class="sla-item"><div class="sla-icon" style="background:#fef2f2;color:#dc2626">🚨</div><div><div class="sla-label">SLA Breached</div><div class="sla-val" id="slaBreach" style="color:#dc2626">0</div></div></div>
+            <div class="sla-divider"></div>
+            <div class="sla-item"><div class="sla-icon" style="background:#f5f3ff;color:#7c3aed">📈</div><div><div class="sla-label">SLA Target</div><div class="sla-val" style="color:#7c3aed">8h</div></div></div>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="stats" id="statCards"></div>
+
+        <!-- Tabs + Filters -->
+        <div class="tabs-container">
+            <div class="tab-row" id="tabRow"></div>
+            <div class="filters">
+                <select id="fStatus" onchange="applyFilters()"><option value="">All Statuses</option></select>
+                <select id="fAssignee" onchange="applyFilters()"><option value="">All Assignees</option></select>
+                <select id="fType" onchange="applyFilters()"><option value="">All Types</option></select>
+                <select id="fPriority" onchange="applyFilters()"><option value="">All Priorities</option><option value="urgent">🔴 Urgent</option><option value="high">🟠 High</option><option value="normal">🟢 Normal</option></select>
+                <label><input type="checkbox" id="fHasNotif" onchange="applyFilters()"> Has Responses</label>
+                <button class="clear-btn" id="clearBtn" onclick="clearFilters()">✕ Clear</button>
+            </div>
+            <div class="active-filters" id="activeFilters"></div>
+        </div>
+
+        <!-- Grid -->
+        <div class="grid" id="gridContainer">
+            <table class="grid-table"><thead><tr>
+                <th style="min-width:250px">REQUEST</th><th>POLICY</th><th>SUBJECT</th><th style="text-align:center">DEADLINE</th><th style="text-align:center">STATUS</th><th style="text-align:center">ASSIGNED</th><th style="text-align:center">AGE</th><th style="text-align:center;width:80px"></th>
+            </tr></thead><tbody id="gridBody"><tr><td colspan="8" class="loading"><div class="spinner"></div>Loading requests...</td></tr></tbody></table>
+            <div class="pagination" id="pagination" style="display:none">
+                <div class="pagination-left"><div id="pageInfo"></div><div class="page-size-select">Show <select id="pageSize" onchange="changePageSize(this.value)"><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select> per page</div></div>
+                <div id="pageBtns"></div>
+            </div>
+        </div>
+
+        <footer class="footer">🔒 Data stored in SharePoint · <span id="appVersion">v1</span></footer>
+    </div>
+
+    <!-- Panel -->
+    <div class="panel-bg" id="panelBg" onclick="closePanel()"></div>
+    <div class="panel" id="panel"><div class="panel-header"><h2 id="panelTitle">Request Details</h2><button class="panel-close" onclick="closePanel()">×</button></div><div class="panel-body" id="panelBody"></div><div class="panel-footer"><button class="btn btn-cancel" onclick="closePanel()">Cancel</button><button class="btn btn-save" onclick="saveRequest()">Save Changes</button></div></div>
+    <div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+//  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
+// ════════════════════════════════════════════════════════════════════
+const APP_VERSION = 1;
+
+const CONFIG = {
+    // ── Azure AD / MSAL ──
+    clientId:   'd9f0fff3-eee3-4339-be58-15ab138374fc',
+    tenantId:   '8b20613e-54c4-43a3-af63-92cdbf260edb',
+    
+    // ── SharePoint ──
+    siteHost:   'gancfried.sharepoint.com',
+    siteId:     '',  // Will be resolved at runtime from sitePath
+    sitePath:   '/sites/GIBUSA',
+    listId:     '',  // Will be resolved at runtime (created if not exists)
+    listName:   'CertTracker',
+    
+    // ── AMS360 (via Azure Function proxy) ──
+    ams360ProxyUrl: 'https://bank-balance-fnbfdefqc8gzfdhz.eastus-01.azurewebsites.net/api',
+
+    // ── Front App (via same Azure Function proxy) ──
+    frontProxyUrl: 'https://bank-balance-fnbfdefqc8gzfdhz.eastus-01.azurewebsites.net/api',
+};
+
+// ════════════════════════════════════════════════════════════════════
+//  CONSTANTS
+// ════════════════════════════════════════════════════════════════════
+const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Completed','Not Related'];
+const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#9333ea','Processing':'#0891b2','Completed':'#16a34a','Delivered':'#059669','Not Related':'#94a3b8'};
+const EXIT_STATUSES = ['Delivered','Not Related'];
+const ACTIVE_STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing'];
+const DONE_STATUSES = ['Completed','Delivered'];
+const REQUEST_TYPES = ['Certificate of Insurance','Additional Insured','Waiver of Subrogation','Endorsement Request','Auto ID Card','Binder'];
+const TYPE_STYLES = {'Certificate of Insurance':{cls:'cert',icon:'📜'},'Additional Insured':{cls:'addl-insured',icon:'👥'},'Waiver of Subrogation':{cls:'waiver',icon:'📋'},'Endorsement Request':{cls:'endorsement',icon:'📝'},'Auto ID Card':{cls:'cert',icon:'🚗'},'Binder':{cls:'cert',icon:'📎'}};
+const ACOLORS = ['#dc2626','#ea580c','#d97706','#16a34a','#0891b2','#2563eb','#7c3aed','#c026d3','#059669','#0d9488','#6366f1','#8b5cf6','#ec4899','#f43f5e','#84cc16','#06b6d4'];
+
+// SharePoint field names — AssignedTo person column lookup ID
+// SharePoint may use 'AssignedToLookupId' or 'AssignedTo0LookupId' depending on creation method
+// We'll try both when reading data
+const F_ASSIGNED_CANDIDATES = ['AssignedToLookupId','AssignedTo0LookupId','AssignedToId'];
+
+// ════════════════════════════════════════════════════════════════════
+//  MSAL AUTH (same pattern as Policy Mgmt)
+// ════════════════════════════════════════════════════════════════════
+const msalConfig = {
+    auth: { clientId: CONFIG.clientId, authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`, redirectUri: location.origin },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
+};
+const SCOPES = ['User.Read','User.ReadBasic.All','Sites.ReadWrite.All'];
+let msal, user, token, currentUserId = null;
+
+// ════════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════════
+let requests = [], filtered = [], siteUsers = [];
+let tab = 'myCerts', statFilter = null, page = 1, PAGE_SIZE = 10, selected = null;
+
+// ════════════════════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════════════════════
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;')}
+function initials(n){if(!n)return'?';const p=n.split(' ');return p.length>1?(p[0][0]+p[p.length-1][0]).toUpperCase():n.substring(0,2).toUpperCase()}
+function fmtDate(d){if(!d)return'';return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+function fmtTime(d){if(!d)return'';return new Date(d).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
+function fmtDateTime(d){return fmtDate(d)+' '+fmtTime(d)}
+function hashCode(str){let h=0;for(let i=0;i<str.length;i++)h=((h<<5)-h)+str.charCodeAt(i);return Math.abs(h)}
+function acolor(id,name){if(name&&name!=='Unassigned'){return ACOLORS[hashCode(name.split(/[|\s]/)[0].trim())%ACOLORS.length]}return ACOLORS[Math.abs(Number(id)||0)%ACOLORS.length]}
+
+// ── Pipe-delimited helpers ──
+function pipeSplit(val){ return val ? val.split('|').filter(Boolean) : []; }
+function pipeJoin(arr){ return (arr||[]).join('|'); }
+function parsePolicies(r){
+    // Parse pipe-delimited fields into policies array
+    const nums = pipeSplit(r.PolicyNums);
+    const types = pipeSplit(r.PolicyTypes);
+    const carriers = pipeSplit(r.Carriers);
+    return nums.map((n,i) => ({ num:n, type:types[i]||'', carrier:carriers[i]||'' }));
+}
+function policiesToFields(policies){
+    return {
+        PolicyNums: pipeJoin(policies.map(p=>p.num)),
+        PolicyTypes: pipeJoin(policies.map(p=>p.type)),
+        Carriers: pipeJoin(policies.map(p=>p.carrier))
+    };
+}
+
+function parseConversations(r){
+    const ids = pipeSplit(r.FrontConvIds);
+    const types = pipeSplit(r.FrontConvTypes);
+    const subjects = pipeSplit(r.FrontConvSubjects);
+    const froms = pipeSplit(r.FrontConvFromEmails);
+    const tos = pipeSplit(r.FrontConvToEmails);
+    return ids.map((id,i) => ({
+        convId: id,
+        type: types[i] || 'customer',
+        subject: subjects[i] || '',
+        from: froms[i] || '',
+        to: tos[i] || '',
+    }));
+}
+
+function conversationsToFields(convs){
+    return {
+        FrontConversationIds:   pipeJoin(convs.map(c=>c.convId)),
+        FrontConversationTypes: pipeJoin(convs.map(c=>c.type)),
+        FrontConvSubjects:      pipeJoin(convs.map(c=>c.subject)),
+        FrontConvFromEmails:    pipeJoin(convs.map(c=>c.from)),
+        FrontConvToEmails:      pipeJoin(convs.map(c=>c.to)),
+    };
+}
+
+function getAge(createdAt){
+    const diff = Date.now() - new Date(createdAt);
+    const hours = Math.floor(diff/3600000);
+    if(hours < 1) return {text:'< 1h', cls:'green'};
+    if(hours < 8) return {text:hours+'h', cls:'green'};
+    if(hours < 24) return {text:hours+'h', cls:'yellow'};
+    const days = Math.floor(hours/24);
+    if(days < 2) return {text:'1d', cls:'yellow'};
+    return {text:days+'d', cls:'red'};
+}
+
+function getDeadlineBadge(deadline){
+    if(!deadline) return {text:'No deadline',cls:'none'};
+    const d = new Date(deadline); d.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diff = Math.floor((d-today)/86400000);
+    if(diff<0) return {text:'PAST DUE',cls:'past'};
+    if(diff===0) return {text:'DUE TODAY',cls:'today'};
+    if(diff===1) return {text:'TOMORROW',cls:'tomorrow'};
+    if(diff<=7) return {text:'IN '+diff+' DAYS',cls:'week'};
+    return {text:'IN '+diff+' DAYS',cls:'future'};
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  MICROSOFT GRAPH API (identical pattern to Policy Mgmt)
+// ════════════════════════════════════════════════════════════════════
+async function graph(url, opts={}, retry=true){
+    if(!token) await getToken();
+    const r = await fetch(`https://graph.microsoft.com/v1.0${url}`, {
+        ...opts,
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+    if(!r.ok){
+        if(r.status === 401 && retry){
+            console.log('Token expired, refreshing...');
+            token = null;
+            await getToken();
+            return graph(url, opts, false);
+        }
+        const t = await r.text();
+        console.error('Graph:', r.status, t);
+        throw new Error(t);
+    }
+    return r.json();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  AUTH FLOW
+// ════════════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+    msal = new window.msal.PublicClientApplication(msalConfig);
+    await msal.initialize();
+    const accounts = msal.getAllAccounts();
+    if(accounts.length){
+        user = accounts[0];
+        await getToken();
+        showApp();
+    }
+    // Populate status filter
+    STATUSES.forEach(s => document.getElementById('fStatus').innerHTML += `<option value="${esc(s)}">${esc(s)}</option>`);
+    // Populate type filter
+    REQUEST_TYPES.forEach(t => document.getElementById('fType').innerHTML += `<option value="${esc(t)}">${esc(t)}</option>`);
+    // Close dropdowns on outside click
+    document.addEventListener('click', e => {
+        if(!e.target.closest('.status-cell') && !e.target.closest('.status-dd')) document.querySelectorAll('.status-dd').forEach(d=>d.remove());
+        if(!e.target.closest('.assignee-cell') && !e.target.closest('.assignee-dd')) document.querySelectorAll('.assignee-dd').forEach(d=>d.remove());
+    });
+});
+
+async function signIn(){
+    try {
+        const r = await msal.loginPopup({ scopes: SCOPES });
+        user = r.account; token = r.accessToken;
+        showApp();
+    } catch(e){ console.error(e); toast('Login failed','err'); }
+}
+
+async function getToken(){
+    try {
+        const r = await msal.acquireTokenSilent({ scopes: SCOPES, account: user });
+        token = r.accessToken;
+    } catch(e){
+        const r = await msal.acquireTokenPopup({ scopes: SCOPES });
+        token = r.accessToken;
+    }
+    return token;
+}
+
+function signOut(){ msal.logoutPopup(); }
+
+async function showApp(){
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('appHeader').classList.add('visible');
+    const name = user.name || user.username || 'User';
+    document.getElementById('userName').textContent = name.split(' ')[0];
+    document.getElementById('appVersion').textContent = 'v' + APP_VERSION;
+    loadPageSizePreference();
+    
+    // Resolve SharePoint site ID
+    await resolveSiteId();
+    
+    // Ensure CertTracker list exists (auto-create if missing)
+    await ensureListExists();
+    
+    await loadSiteUsers();
+    await loadRequests();
+    startAutoRefresh();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  SHAREPOINT SETUP — Auto-resolve site & create list
+// ════════════════════════════════════════════════════════════════════
+async function resolveSiteId(){
+    if(CONFIG.siteId) return;
+    try {
+        const r = await graph(`/sites/${CONFIG.siteHost}:${CONFIG.sitePath}`);
+        CONFIG.siteId = r.id.split(',')[1]; // Extract GUID from "host,siteId,webId"
+        console.log('Resolved site ID:', CONFIG.siteId);
+    } catch(e){
+        console.error('Failed to resolve site:', e);
+        toast('Cannot access SharePoint site','err');
+    }
+}
+
+async function ensureListExists(){
+    // Try to find existing list by name
+    try {
+        const r = await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists?$filter=displayName eq '${CONFIG.listName}'`);
+        if(r.value && r.value.length > 0){
+            CONFIG.listId = r.value[0].id;
+            console.log('Found existing list:', CONFIG.listName, CONFIG.listId);
+            // Ensure new columns exist (safe migration for lists created before this version)
+            await ensureColumnsExist();
+            return;
+        }
+    } catch(e){ console.log('List search failed, will attempt creation:', e.message); }
+
+    // List doesn't exist — create it with all columns
+    console.log('Creating CertTracker list...');
+    toast('Setting up CertTracker list...','');
+
+    try {
+        // Step 1: Create the list
+        const listDef = {
+            displayName: CONFIG.listName,
+            list: { template: 'genericList' },
+            columns: [
+                { name: 'RefId',                   text: {} },
+                { name: 'RequestType',              choice: { choices: REQUEST_TYPES } },
+                { name: 'Priority',                 choice: { choices: ['urgent','high','normal'] } },
+                { name: 'Status',                   choice: { choices: STATUSES } },
+                { name: 'ReopenedFrom',             text: {} },
+                { name: 'Deadline',                 dateTime: { format: 'dateOnly' } },
+                { name: 'CustomerName',             text: {} },
+                { name: 'CustomerEmail',            text: {} },
+                { name: 'AmsCustomerId',            text: {} },
+                { name: 'PolicyNums',               text: {} },
+                { name: 'PolicyTypes',              text: {} },
+                { name: 'Carriers',                 text: {} },
+                { name: 'FrontConversationIds',     text: {} },
+                { name: 'FrontConversationTypes',   text: {} },
+                { name: 'FrontConvSubjects',        text: {} },
+                { name: 'FrontConvFromEmails',      text: {} },
+                { name: 'FrontConvToEmails',        text: {} },
+                { name: 'HasCustomerResponse',      boolean: {} },
+                { name: 'HasCarrierResponse',       boolean: {} },
+                { name: 'SlaBreached',              boolean: {} },
+                { name: 'Archived',                 boolean: {} },
+                { name: 'EmailReceivedAt',          text: {} },
+            ]
+        };
+
+        const created = await graph(
+            `/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists`,
+            { method: 'POST', body: JSON.stringify(listDef) }
+        );
+        CONFIG.listId = created.id;
+        console.log('Created list:', CONFIG.listName, CONFIG.listId);
+
+        // Step 2: Add Person column (requires separate call — lookup type)
+        try {
+            await graph(
+                `/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`,
+                { method: 'POST', body: JSON.stringify({
+                    name: 'AssignedTo',
+                    personOrGroup: { 
+                        allowMultipleSelection: false,
+                        chooseFromType: 'peopleOnly'
+                    }
+                })}
+            );
+            console.log('Added AssignedTo person column');
+        } catch(e){
+            console.warn('Could not add person column (may need manual setup):', e.message);
+        }
+
+        // Step 3: Add Notes as multi-line text column
+        try {
+            await graph(
+                `/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`,
+                { method: 'POST', body: JSON.stringify({
+                    name: 'Notes',
+                    text: { allowMultipleLines: true, textType: 'plain' }
+                })}
+            );
+            console.log('Added Notes column');
+        } catch(e){
+            console.warn('Could not add Notes column:', e.message);
+        }
+
+        toast('CertTracker list created! ✓','ok');
+
+    } catch(e){
+        console.error('List creation failed:', e);
+        toast('Failed to create list — check permissions','err');
+        throw e;
+    }
+}
+
+// Add missing columns to an existing list (safe migration)
+async function ensureColumnsExist(){
+    const newCols = [
+        { name: 'FrontConvSubjects',    text: {} },
+        { name: 'FrontConvFromEmails',   text: {} },
+        { name: 'FrontConvToEmails',     text: {} },
+        { name: 'EmailReceivedAt',       text: {} },
+    ];
+    try {
+        const existing = await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`);
+        const existingNames = existing.value.map(c => c.name);
+        for(const col of newCols){
+            if(!existingNames.includes(col.name)){
+                try {
+                    await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`, { method:'POST', body:JSON.stringify(col) });
+                    console.log('Added missing column:', col.name);
+                } catch(e){ console.warn('Could not add column', col.name, e.message); }
+            }
+        }
+    } catch(e){ console.warn('Column migration check failed:', e.message); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  LOAD DATA FROM SHAREPOINT
+// ════════════════════════════════════════════════════════════════════
+async function loadSiteUsers(){
+    try {
+        const r = await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/User%20Information%20List/items?$expand=fields&$top=500`);
+        siteUsers = r.value.map(u => ({ id: String(u.fields.id), name: u.fields.Title||'', email: u.fields.EMail||'' })).filter(u => u.name);
+        const email = user.username?.toLowerCase();
+        const me = siteUsers.find(u => u.email?.toLowerCase() === email);
+        if(me) currentUserId = me.id;
+        console.log('Current user ID:', currentUserId, 'Total site users:', siteUsers.length);
+        buildAssigneeFilter();
+    } catch(e){ console.log('Site users error:', e.message); }
+}
+
+async function loadRequests(silent=false){
+    if(!silent) document.getElementById('gridBody').innerHTML = '<tr><td colspan="8" class="loading"><div class="spinner"></div>Loading requests...</td></tr>';
+    try {
+        requests = [];
+        let url = `/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items?$expand=fields&$top=999`;
+        while(url){
+            const r = await graph(url);
+            r.value.forEach(item => {
+                const f = item.fields;
+                // Try multiple possible field names for the person lookup
+                let assignedId = null;
+                for(const fname of F_ASSIGNED_CANDIDATES){
+                    if(f[fname]){ assignedId = String(f[fname]); break; }
+                }
+                let assignedName = null;
+                if(assignedId){
+                    const u = siteUsers.find(su => su.id === assignedId);
+                    if(u) assignedName = u.name;
+                }
+                requests.push({
+                    id:             item.id,
+                    RefId:          f.RefId || '',
+                    Title:          f.Title || '',
+                    RequestType:    f.RequestType || 'Certificate of Insurance',
+                    Priority:       f.Priority || 'normal',
+                    Status:         f.Status || 'New Request',
+                    ReopenedFrom:   f.ReopenedFrom || '',
+                    Deadline:       f.Deadline || '',
+                    CreatedAt:      f.Created || item.createdDateTime || '',
+                    AssignedId:     assignedId,
+                    AssignedName:   assignedName,
+                    Notes:          f.Notes || '',
+                    CustomerName:   f.CustomerName || '',
+                    CustomerEmail:  f.CustomerEmail || '',
+                    AmsCustomerId:  f.AmsCustomerId || '',
+                    // Pipe-delimited → parsed
+                    PolicyNums:     f.PolicyNums || '',
+                    PolicyTypes:    f.PolicyTypes || '',
+                    Carriers:       f.Carriers || '',
+                    policies:       [], // Will be parsed below
+                    // Front App
+                    FrontConvIds:       f.FrontConversationIds || '',
+                    FrontConvTypes:     f.FrontConversationTypes || '',
+                    FrontConvSubjects:  f.FrontConvSubjects || '',
+                    FrontConvFromEmails:f.FrontConvFromEmails || '',
+                    FrontConvToEmails:  f.FrontConvToEmails || '',
+                    HasCustomerResponse: f.HasCustomerResponse || false,
+                    HasCarrierResponse:  f.HasCarrierResponse || false,
+                    SlaBreached:         f.SlaBreached || false,
+                    Archived:            f.Archived || false,
+                    EmailReceivedAt:     f.EmailReceivedAt || '',
+                });
+            });
+            url = r['@odata.nextLink'] ? r['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
+        }
+        // Parse pipe-delimited policies and conversations
+        requests.forEach(r => {
+            r.policies = parsePolicies(r);
+            r.conversations = parseConversations(r);
+        });
+        console.log('Loaded', requests.length, 'cert requests');
+        buildAssigneeFilter();
+        renderAll();
+    } catch(e){
+        console.error('Load error:', e);
+        document.getElementById('gridBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:60px;color:#dc2626">Error loading requests. Check console.</td></tr>';
+    }
+}
+
+function buildAssigneeFilter(){
+    const names = new Map();
+    requests.forEach(r => { if(r.AssignedId && r.AssignedName) names.set(r.AssignedId, r.AssignedName); });
+    const sel = document.getElementById('fAssignee');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All Assignees</option>';
+    [...names.entries()].sort((a,b) => a[1].localeCompare(b[1])).forEach(([id,name]) => {
+        sel.innerHTML += `<option value="${id}">${esc(name)}</option>`;
+    });
+    sel.value = cur;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  AUTO-REFRESH (same pattern as Policy Mgmt)
+// ════════════════════════════════════════════════════════════════════
+let lastRefresh = Date.now(), refreshInterval = null, isRefreshing = false;
+const REFRESH_INTERVAL = 3*60*1000;
+const VISIBILITY_THRESHOLD = 60*1000;
+
+async function refreshData(silent=false){
+    if(isRefreshing) return;
+    isRefreshing = true;
+    if(!silent) toast('Refreshing...','');
+    try {
+        await loadRequests(silent);
+        lastRefresh = Date.now();
+        if(!silent) toast('Data refreshed','ok');
+    } catch(e){
+        console.error('Refresh error:', e);
+        if(!silent) toast('Refresh failed','err');
+    } finally { isRefreshing = false; }
+}
+
+function startAutoRefresh(){
+    if(refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(() => refreshData(true), REFRESH_INTERVAL);
+    if(!window._versionCheckStarted){
+        window._versionCheckStarted = true;
+        setInterval(checkAppVersion, 180000);
+    }
+}
+
+function checkAppVersion(){
+    fetch(location.pathname + '?_nocache=' + Date.now(), {cache:'no-store'})
+        .then(r => r.text())
+        .then(html => {
+            const match = html.match(/const APP_VERSION\s*=\s*(\d+)/);
+            if(match && parseInt(match[1]) > APP_VERSION){
+                if(confirm('New version (v'+match[1]+') available! Refresh?')){
+                    location.replace(location.pathname + '?_v=' + match[1] + '&_t=' + Date.now());
+                }
+            }
+        }).catch(()=>{});
+}
+
+document.addEventListener('visibilitychange', async () => {
+    if(document.visibilityState === 'visible'){
+        const idle = Date.now() - lastRefresh;
+        if(idle > 5*60*1000){ token=null; try{await getToken();}catch(e){toast('Session expired','err');setTimeout(()=>location.reload(),1500);return;} }
+        if(idle > VISIBILITY_THRESHOLD){ refreshData(true); checkAppVersion(); }
+    }
+});
+
+// Page size
+function loadPageSizePreference(){
+    const key = user.username||user.name||'default';
+    const saved = localStorage.getItem('ct_pageSize_'+key);
+    if(saved && [10,25,50,100].includes(parseInt(saved))) PAGE_SIZE = parseInt(saved);
+    document.getElementById('pageSize').value = PAGE_SIZE;
+}
+function changePageSize(size){
+    PAGE_SIZE = parseInt(size);
+    document.getElementById('pageSize').value = size;
+    const key = user.username||user.name||'default';
+    localStorage.setItem('ct_pageSize_'+key, size);
+    page = 1; renderTable();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  STAT CARDS
+// ════════════════════════════════════════════════════════════════════
+function updateStats(){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status));
+    const counts = {
+        newReq:     active.filter(r => r.Status==='New Request').length,
+        pastDue:    active.filter(r => { const d=new Date(r.Deadline);d.setHours(0,0,0,0); return d<today; }).length,
+        dueToday:   active.filter(r => { const d=new Date(r.Deadline);d.setHours(0,0,0,0); return d.getTime()===today.getTime(); }).length,
+        pending:    active.filter(r => r.Status.startsWith('Pending')).length,
+        inProgress: active.filter(r => ['In Review','Processing'].includes(r.Status)).length,
+        custResp:   active.filter(r => r.HasCustomerResponse).length,
+        carrResp:   active.filter(r => r.HasCarrierResponse).length,
+        completed:  requests.filter(r => !r.Archived && r.Status==='Completed').length,
+        unassigned: active.filter(r => !r.AssignedId).length,
+        slaBreach:  active.filter(r => r.SlaBreached).length,
+    };
+    const cards = [
+        {key:'newReq',label:'New Requests',num:counts.newReq,color:'red',icon:'🚨'},
+        {key:'pastDue',label:'Past Due',num:counts.pastDue,color:'rose',icon:'⏰'},
+        {key:'dueToday',label:'Due Today',num:counts.dueToday,color:'yellow',icon:'📅'},
+        {key:'pending',label:'Pending',num:counts.pending,color:'purple',icon:'⏳'},
+        {key:'inProgress',label:'In Progress',num:counts.inProgress,color:'blue',icon:'🔄'},
+        {key:'custResp',label:'Customer Replies',num:counts.custResp,color:'sky',icon:'💬'},
+        {key:'carrResp',label:'Carrier Replies',num:counts.carrResp,color:'orange',icon:'🏢'},
+        {key:'completed',label:'Completed',num:counts.completed,color:'green',icon:'✅'},
+        {key:'unassigned',label:'Unassigned',num:counts.unassigned,color:'gray',icon:'👤'},
+        {key:'slaBreach',label:'SLA Breached',num:counts.slaBreach,color:'red',icon:'❌'},
+    ];
+    document.getElementById('statCards').innerHTML = cards.map(c =>
+        `<div class="stat ${c.color}${statFilter===c.key?' active':''}" onclick="toggleStatFilter('${c.key}')"><div class="stat-info"><div class="label">${c.label}</div><div class="num">${c.num}</div></div><div class="stat-icon">${c.icon}</div></div>`
+    ).join('');
+    // Notif badge
+    const total = counts.custResp + counts.carrResp;
+    const badge = document.getElementById('notifBadge');
+    badge.textContent = total; badge.style.display = total>0?'flex':'none';
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  TABS
+// ════════════════════════════════════════════════════════════════════
+function renderTabs(){
+    const now = new Date();
+    const isPendingHidden = r => {
+        if(!r.Status.startsWith('Pending')) return false;
+        // Show pending if: 24h SLA passed OR has customer/carrier response
+        if(r.HasCustomerResponse || r.HasCarrierResponse) return false;
+        // Check if 24h has passed since status was set (use Modified as proxy)
+        // For now, hide all pending that don't have responses
+        return true;
+    };
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !isPendingHidden(r));
+    const myPending = requests.filter(r => !r.Archived && r.Status.startsWith('Pending') && r.AssignedId===currentUserId);
+    const allPending = requests.filter(r => !r.Archived && r.Status.startsWith('Pending'));
+    const tabs = [
+        {key:'myCerts', label:'📜 My Requests', count:active.filter(r=>r.AssignedId===currentUserId).length},
+        {key:'allCerts', label:'📋 All Requests', count:active.length},
+        {key:'myPending', label:'⏳ My Pending', count:myPending.length},
+        {key:'completed', label:'✅ Completed', count:requests.filter(r=>r.Status==='Completed'&&!r.Archived).length},
+        {key:'archived', label:'📁 Archived', count:requests.filter(r=>r.Archived).length},
+    ];
+    document.getElementById('tabRow').innerHTML = tabs.map(t =>
+        `<div class="tab${tab===t.key?' active':''}" onclick="switchTab('${t.key}')">${t.label}<span class="count">${t.count}</span></div>`
+    ).join('');
+}
+function switchTab(t){ tab=t; statFilter=null; page=1; renderTabs(); applyFilters(); }
+function toggleStatFilter(key){ statFilter = statFilter===key?null:key; if(statFilter)tab='allCerts'; page=1; renderTabs(); applyFilters(); updateStats(); }
+function toggleNotifFilter(){ statFilter = statFilter==='custResp'?'carrResp':'custResp'; tab='allCerts'; page=1; renderTabs(); applyFilters(); updateStats(); }
+
+// ════════════════════════════════════════════════════════════════════
+//  FILTERS
+// ════════════════════════════════════════════════════════════════════
+function applyFilters(){
+    const search = document.getElementById('globalSearch').value.toLowerCase();
+    const statusF = document.getElementById('fStatus').value;
+    const assigneeF = document.getElementById('fAssignee').value;
+    const typeF = document.getElementById('fType').value;
+    const priorityF = document.getElementById('fPriority').value;
+    const hasNotifF = document.getElementById('fHasNotif').checked;
+    const today = new Date(); today.setHours(0,0,0,0);
+
+    filtered = requests.filter(r => {
+        const isPending = r.Status.startsWith('Pending');
+        const pendingHasResponse = isPending && (r.HasCustomerResponse || r.HasCarrierResponse);
+
+        // Tab filtering
+        if(tab==='myCerts'){
+            if(r.AssignedId!==currentUserId) return false;
+            if(r.Archived) return false;
+            if(isPending && !pendingHasResponse) return false; // hide pending without responses from My Requests too
+        }
+        if(tab==='allCerts'){
+            if(r.Archived) return false;
+            if(EXIT_STATUSES.includes(r.Status)) return false;
+            if(r.Status==='Completed') return false;
+            // Hide pending items UNLESS they have a response (came back)
+            if(isPending && !pendingHasResponse) return false;
+        }
+        if(tab==='myPending'){
+            if(!isPending) return false;
+            if(r.Archived) return false;
+        }
+        if(tab==='completed'){
+            if(r.Status!=='Completed') return false;
+            if(r.Archived) return false;
+        }
+        if(tab==='archived'){
+            if(!r.Archived) return false;
+        }
+
+        if(statFilter){
+            const dl = r.Deadline ? new Date(r.Deadline) : null; if(dl) dl.setHours(0,0,0,0);
+            if(statFilter==='newReq' && r.Status!=='New Request') return false;
+            if(statFilter==='pastDue' && (!dl||dl>=today||EXIT_STATUSES.includes(r.Status))) return false;
+            if(statFilter==='dueToday' && (!dl||dl.getTime()!==today.getTime()||EXIT_STATUSES.includes(r.Status))) return false;
+            if(statFilter==='pending' && !r.Status.startsWith('Pending')) return false;
+            if(statFilter==='inProgress' && !['In Review','Processing'].includes(r.Status)) return false;
+            if(statFilter==='custResp' && !r.HasCustomerResponse) return false;
+            if(statFilter==='carrResp' && !r.HasCarrierResponse) return false;
+            if(statFilter==='completed' && r.Status!=='Completed') return false;
+            if(statFilter==='unassigned' && r.AssignedId) return false;
+            if(statFilter==='slaBreach' && !r.SlaBreached) return false;
+        }
+
+        if(statusF && r.Status!==statusF) return false;
+        if(assigneeF && r.AssignedId!==assigneeF) return false;
+        if(typeF && r.RequestType!==typeF) return false;
+        if(priorityF && r.Priority!==priorityF) return false;
+        if(hasNotifF && !r.HasCustomerResponse && !r.HasCarrierResponse) return false;
+        if(search){
+            const polText = (r.policies||[]).map(p=>p.num+' '+p.carrier+' '+p.type).join(' ');
+            const txt = [r.RefId,r.CustomerName,polText,r.RequestType,r.Notes,r.CustomerEmail,r.Title].join(' ').toLowerCase();
+            if(!txt.includes(search)) return false;
+        }
+        return true;
+    });
+
+    // Sort: responses on top, then newest email first
+    filtered.sort((a,b) => {
+        // Responses bubble to top
+        const aN=(a.HasCustomerResponse||a.HasCarrierResponse)?1:0, bN=(b.HasCustomerResponse||b.HasCarrierResponse)?1:0;
+        if(aN!==bN) return bN-aN;
+        // Then by email received date, newest first
+        const dA=new Date(a.EmailReceivedAt||a.CreatedAt||0), dB=new Date(b.EmailReceivedAt||b.CreatedAt||0);
+        return dB-dA;
+    });
+
+    renderTable();
+    updateFilterUI();
+}
+
+function clearFilters(){
+    document.getElementById('globalSearch').value='';
+    document.getElementById('fStatus').value='';
+    document.getElementById('fAssignee').value='';
+    document.getElementById('fType').value='';
+    document.getElementById('fPriority').value='';
+    document.getElementById('fHasNotif').checked=false;
+    statFilter=null; page=1;
+    updateStats(); applyFilters();
+}
+
+function updateFilterUI(){
+    const tags=[];
+    const search=document.getElementById('globalSearch').value;
+    if(search) tags.push({type:'search',label:'Search: "'+esc(search)+'"'});
+    if(statFilter) tags.push({type:'stat',label:'📊 '+statFilter});
+    if(document.getElementById('fStatus').value) tags.push({type:'status',label:'Status: '+document.getElementById('fStatus').value});
+    if(document.getElementById('fAssignee').value){const o=document.getElementById('fAssignee');tags.push({type:'assignee',label:'Assigned: '+o.options[o.selectedIndex].text})}
+    if(document.getElementById('fType').value) tags.push({type:'type',label:'Type: '+document.getElementById('fType').value});
+    if(document.getElementById('fPriority').value) tags.push({type:'priority',label:'Priority: '+document.getElementById('fPriority').value});
+    if(document.getElementById('fHasNotif').checked) tags.push({type:'notif',label:'Has Responses'});
+
+    const c=document.getElementById('activeFilters');
+    const b=document.getElementById('clearBtn');
+    if(tags.length>0){
+        c.innerHTML='<span class="active-filters-label">Active Filters:</span>'+tags.map(t=>`<span class="filter-tag">${t.label} <span class="remove" onclick="removeFilter('${t.type}')">×</span></span>`).join('');
+        c.style.display='flex'; b.classList.add('visible');
+    } else { c.innerHTML=''; c.style.display='none'; b.classList.remove('visible'); }
+}
+
+function removeFilter(type){
+    if(type==='search')document.getElementById('globalSearch').value='';
+    if(type==='stat')statFilter=null;
+    if(type==='status')document.getElementById('fStatus').value='';
+    if(type==='assignee')document.getElementById('fAssignee').value='';
+    if(type==='type')document.getElementById('fType').value='';
+    if(type==='priority')document.getElementById('fPriority').value='';
+    if(type==='notif')document.getElementById('fHasNotif').checked=false;
+    updateStats(); applyFilters();
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  TABLE RENDERING
+// ════════════════════════════════════════════════════════════════════
+function renderTable(){
+    const body=document.getElementById('gridBody');
+    const total=filtered.length, pages=Math.ceil(total/PAGE_SIZE);
+    const start=(page-1)*PAGE_SIZE, items=filtered.slice(start,start+PAGE_SIZE);
+
+    if(!items.length){ body.innerHTML='<tr><td colspan="8" style="text-align:center;padding:60px;color:#6b7280">No requests found</td></tr>'; document.getElementById('pagination').style.display='none'; return; }
+
+    body.innerHTML = items.map(r => {
+        const ts = TYPE_STYLES[r.RequestType]||{cls:'cert',icon:'📜'};
+        const badge = getDeadlineBadge(r.Deadline);
+        const age = getAge(r.EmailReceivedAt || r.CreatedAt);
+        const color = STATUS_COLORS[r.Status]||'#6b7280';
+        const aName = r.AssignedName||'Unassigned';
+        const ac = r.AssignedId ? acolor(r.AssignedId, r.AssignedName) : '#9ca3af';
+        const priorityDot = r.Priority==='urgent'?'🔴 ':r.Priority==='high'?'🟠 ':'';
+        const carriers = (r.policies||[]).map(p=>p.carrier).filter((v,i,a)=>a.indexOf(v)===i);
+        const hasCustomer = r.CustomerName && r.CustomerName !== 'Unknown' && r.CustomerName.trim() !== '';
+        const convSubjects = pipeSplit(r.FrontConvSubjects);
+        const subject = convSubjects[0] || '';
+        const frontConvId = r.FrontConvIds?.split('|')[0] || '';
+
+        let notifHtml='';
+        if(r.HasCustomerResponse||r.HasCarrierResponse||r.SlaBreached){
+            notifHtml='<div class="notif-dots">';
+            if(r.HasCustomerResponse) notifHtml+='<span class="notif-dot customer">💬 Customer</span>';
+            if(r.HasCarrierResponse) notifHtml+='<span class="notif-dot carrier">🏢 Carrier</span>';
+            if(r.SlaBreached) notifHtml+='<span class="notif-dot sla">⚠️ SLA</span>';
+            notifHtml+='</div>';
+        }
+
+        return `<tr${r.Status==='Not Related'?' style="opacity:0.5"':''}>
+            <td style="cursor:pointer;position:relative" onclick="event.stopPropagation();openInlineCustomerSearch('${r.id}',this)"><div class="req-cell">
+                <div class="req-icon" style="background:${color}15;color:${color}">${ts.icon}</div>
+                <div class="req-info">
+                    <span class="type-badge ${ts.cls}">${priorityDot}${esc(r.RequestType)}</span>
+                    ${hasCustomer
+                        ? '<div class="cust-name">'+esc(r.CustomerName)+'</div>'
+                        : '<div style="font-size:12px;color:#94a3b8;font-style:italic;margin-top:3px">No customer assigned</div>'
+                    }
+                    <div class="ref-id">${esc(r.RefId)}</div>
+                    ${notifHtml}
+                </div>
+            </div></td>
+            <td style="cursor:pointer;position:relative" onclick="event.stopPropagation();openInlinePolicyPicker('${r.id}',this)">
+                ${(r.policies||[]).length > 0 ? `
+                    ${carriers.length ? '<div style="font-size:12px;font-weight:600;color:#111827">'+carriers.join(', ')+'</div>' : ''}
+                    <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">${r.policies.map(p=>'<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;background:#f1f5f9;color:#475569;font-family:monospace">'+esc(p.num)+'</span>').join('')}</div>
+                    ${r.AmsCustomerId?'<a class="ams-link" href="https://www.ams360.com/v2512561/NextGen/Customer/Detail/'+esc(r.AmsCustomerId)+'" target="_blank" onclick="event.stopPropagation()">🔗 AMS360</a>':''}
+                ` : `<div style="font-size:12px;color:#94a3b8;font-style:italic">No policy assigned</div>`}
+            </td>
+            <td>
+                ${subject ? `<div style="font-size:13px;color:#2563eb;font-weight:500;max-width:280px;line-height:1.4;cursor:pointer;text-decoration:none" onclick="openFront('${esc(frontConvId)}')" title="${esc(subject)}">${esc(subject)}</div>` : '<div style="font-size:11px;color:#cbd5e1">—</div>'}
+            </td>
+            <td class="deadline-cell"><div class="due-badge ${badge.cls}">${badge.text}</div><div class="due-date">${fmtDate(r.Deadline)}</div></td>
+            <td class="status-cell">
+                <div class="status-badge" style="background:${color}15;color:${color}" onclick="openStatusDD('${r.id}',this)">${esc(r.Status)}</div>
+                ${r.ReopenedFrom?'<div style="font-size:10px;color:#d97706;font-weight:600;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:3px">⚡ Reopened from '+esc(r.ReopenedFrom)+'</div>':''}
+            </td>
+            <td class="assignee-cell"><div class="assignee-badge" style="background:${ac}15;color:${ac}" onclick="openAssigneeDD('${r.id}',this)"><div class="init" style="background:${ac}">${initials(aName)}</div><span class="name">${esc(aName)}</span></div></td>
+            <td class="age-cell"><div class="age-pill ${age.cls}">${age.text}</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">${r.EmailReceivedAt?fmtDateTime(r.EmailReceivedAt):r.CreatedAt?fmtDateTime(r.CreatedAt):''}</div></td>
+            <td style="text-align:center"><div style="display:flex;gap:6px;justify-content:center">
+                <button class="front-btn" onclick="openFront('${esc(frontConvId)}')" title="Open in Front">✉️</button>
+                <button class="action-btn" onclick="openPanel('${r.id}')" title="Details">📋</button>
+            </div></td>
+        </tr>`;
+    }).join('');
+
+    // Pagination
+    const pag=document.getElementById('pagination');
+    if(total>PAGE_SIZE){
+        pag.style.display='flex';
+        document.getElementById('pageInfo').textContent=`Showing ${start+1}-${Math.min(start+PAGE_SIZE,total)} of ${total}`;
+        let btns=`<button class="page-btn" onclick="goPage(${page-1})" ${page===1?'disabled':''}>← Prev</button> `;
+        for(let i=Math.max(1,page-2);i<=Math.min(pages,page+2);i++) btns+=`<button class="page-btn ${i===page?'active':''}" onclick="goPage(${i})">${i}</button> `;
+        btns+=`<button class="page-btn" onclick="goPage(${page+1})" ${page===pages?'disabled':''}>Next →</button>`;
+        document.getElementById('pageBtns').innerHTML=btns;
+    } else { pag.style.display='none'; }
+}
+function goPage(p){if(p<1)return;page=p;renderTable();window.scrollTo(0,0)}
+
+// ════════════════════════════════════════════════════════════════════
+//  STATUS DROPDOWN (click-to-change)
+// ════════════════════════════════════════════════════════════════════
+function openStatusDD(id, el){
+    document.querySelectorAll('.status-dd').forEach(d=>d.remove());
+    const rect=el.getBoundingClientRect();
+    const dd=document.createElement('div');dd.className='status-dd';
+    dd.style.position='fixed';dd.style.zIndex='1001';
+    if(window.innerHeight-rect.bottom<320) dd.style.bottom=(window.innerHeight-rect.top+6)+'px';
+    else dd.style.top=(rect.bottom+6)+'px';
+    dd.style.left=rect.left+'px';
+    dd.innerHTML=STATUSES.map(s=>`<div class="status-opt" onclick="event.stopPropagation();setStatus('${id}','${s.replace(/'/g,"\\'")}')"><div class="status-dot" style="background:${STATUS_COLORS[s]}"></div>${s}</div>`).join('');
+    document.body.appendChild(dd);
+}
+
+async function setStatus(id, status){
+    document.querySelectorAll('.status-dd').forEach(d=>d.remove());
+    try {
+        const fields = { Status: status, ReopenedFrom: '' };
+        // Auto-archive 'Not Related' only
+        if(status === 'Not Related'){
+            fields.Archived = true;
+        }
+        // Un-archive if moving away from Not Related
+        const r = requests.find(x=>x.id===id);
+        if(r && r.Archived && status !== 'Not Related'){
+            fields.Archived = false;
+        }
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${id}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
+        if(r){ r.Status=status; r.ReopenedFrom=''; if(fields.Archived!==undefined) r.Archived=fields.Archived; }
+        toast('Status → '+status,'ok');
+        renderAll();
+    } catch(e){ toast('Update failed','err'); console.error(e); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  ASSIGNEE DROPDOWN
+// ════════════════════════════════════════════════════════════════════
+function openAssigneeDD(id, el){
+    document.querySelectorAll('.assignee-dd').forEach(d=>d.remove());
+    const rect=el.getBoundingClientRect();
+    const dd=document.createElement('div');dd.className='assignee-dd';
+    dd.style.position='fixed';dd.style.zIndex='1001';
+    if(window.innerHeight-rect.bottom<300) dd.style.bottom=(window.innerHeight-rect.top+6)+'px';
+    else dd.style.top=(rect.bottom+6)+'px';
+    dd.style.left=Math.min(rect.left,window.innerWidth-300)+'px';
+    dd.innerHTML='<input type="text" placeholder="Search users..." onclick="event.stopPropagation()" oninput="filterAssignDD(this,\''+id+'\')"><div class="assignee-list" id="al-dd-'+id+'">'+renderAssignOpts(id,siteUsers.slice(0,12))+'</div>';
+    document.body.appendChild(dd);
+    dd.querySelector('input').focus();
+}
+function renderAssignOpts(reqId,list){
+    return `<div class="assignee-opt" onclick="setAssignee('${reqId}','','')"><div class="avatar" style="background:#9ca3af">?</div>Unassigned</div>`+
+        list.map(u=>`<div class="assignee-opt" onclick="setAssignee('${reqId}','${u.id}','${u.name.replace(/'/g,"\\'")}')"><div class="avatar" style="background:${acolor(u.id,u.name)}">${initials(u.name)}</div>${esc(u.name)}</div>`).join('');
+}
+function filterAssignDD(input,reqId){
+    const q=input.value.toLowerCase();
+    const list=q.length<2?siteUsers.slice(0,12):siteUsers.filter(u=>u.name.toLowerCase().includes(q)).slice(0,12);
+    const el=document.getElementById('al-dd-'+reqId);
+    if(el) el.innerHTML=renderAssignOpts(reqId,list);
+}
+async function setAssignee(id, userId, userName){
+    document.querySelectorAll('.assignee-dd').forEach(d=>d.remove());
+    // Detect which field name works for the person lookup
+    const assignFieldName = await getAssignedFieldName();
+    try {
+        const fields = {};
+        fields[assignFieldName] = userId ? parseInt(userId) : null;
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${id}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
+        const r = requests.find(x=>x.id===id);
+        if(r){ r.AssignedId=userId||null; r.AssignedName=userName||null; }
+        toast('Assigned to '+(userName||'Unassigned'),'ok');
+        buildAssigneeFilter(); renderAll();
+    } catch(e){ toast('Update failed','err'); console.error(e); }
+}
+
+// Cache the correct field name for the person column
+let _assignedFieldName = null;
+async function getAssignedFieldName(){
+    if(_assignedFieldName) return _assignedFieldName;
+    // Try to detect from an existing item, or fall back to trying each candidate
+    try {
+        const r = await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`);
+        const personCol = r.value.find(c => c.name === 'AssignedTo' || c.displayName === 'AssignedTo');
+        if(personCol){
+            // The lookup field name is typically the column name + 'LookupId'
+            _assignedFieldName = personCol.name + 'LookupId';
+            console.log('Detected assigned field name:', _assignedFieldName);
+            return _assignedFieldName;
+        }
+    } catch(e){}
+    _assignedFieldName = 'AssignedToLookupId'; // Default fallback
+    return _assignedFieldName;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  PANEL — VIEW/EDIT REQUEST
+// ════════════════════════════════════════════════════════════════════
+function openPanel(id){
+    const r = requests.find(x=>x.id===id);
+    if(!r){ openNewRequest(); return; }
+    selected = r;
+    const color = STATUS_COLORS[r.Status]||'#6b7280';
+    const ts = TYPE_STYLES[r.RequestType]||{cls:'cert',icon:'📜'};
+
+    // Parse conversations from stored pipe-delimited data
+    const convs = r.conversations || [];
+
+    document.getElementById('panelTitle').textContent = (r.RefId||'New') + ' — ' + (r.CustomerName||r.Title);
+    document.getElementById('panelBody').innerHTML = `
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+            <span class="status-badge" style="background:${color}15;color:${color};font-size:14px;padding:8px 18px">${esc(r.Status)}</span>
+            ${r.ReopenedFrom?'<span style="background:#fef3c7;color:#d97706;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600">⚡ Reopened from '+esc(r.ReopenedFrom)+'</span>':''}
+            <span class="type-badge ${ts.cls}" style="font-size:12px;padding:5px 12px">${ts.icon} ${esc(r.RequestType)}</span>
+            ${r.Priority==='urgent'?'<span style="background:#fef2f2;color:#dc2626;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600">🔴 URGENT</span>':''}
+            ${r.Priority==='high'?'<span style="background:#fff7ed;color:#ea580c;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600">🟠 HIGH</span>':''}
+        </div>
+
+        <!-- LINKED CONVERSATIONS -->
+        <div class="section">
+            <h3>✉️ Linked Conversations <span style="font-size:11px;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:0">(${convs.length} thread${convs.length!==1?'s':''})</span></h3>
+            ${convs.length === 0 ? '<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;background:#f9fafb;border-radius:8px">No conversations linked yet</div>' : ''}
+            <div id="convCardsContainer">
+            ${convs.map(c => {
+                const isUnread = (c.type==='customer'&&r.HasCustomerResponse)||(c.type==='carrier'&&r.HasCarrierResponse);
+                return `<div class="conv-card ${c.type}${isUnread?' unread':''}">
+                    <div class="conv-card-header">
+                        <span class="conv-card-type ${c.type}">${c.type==='customer'?'💬 Customer':'🏢 Carrier'} Thread</span>
+                        ${isUnread?'<div style="display:flex;align-items:center;gap:6px"><div class="conv-card-unread-dot '+c.type+'"></div><span style="font-size:11px;font-weight:600;color:'+(c.type==='customer'?'#2563eb':'#ea580c')+'">NEW</span><button onclick="markRead(\''+r.id+'\',\''+c.type+'\')" style="background:'+(c.type==='customer'?'#2563eb':'#ea580c')+';color:#fff;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:11px;font-weight:600">✓ Read</button></div>':''}
+                    </div>
+                    <div class="conv-card-subject" id="convSubj_${esc(c.convId)}">${c.subject ? '📨 '+esc(c.subject) : '<span style="color:#94a3b8;font-style:italic">📨 Loading subject from Front...</span>'}</div>
+                    <div class="conv-card-meta" id="convMeta_${esc(c.convId)}">
+                        ${c.from ? '<strong>From:</strong> '+esc(c.from) : ''}
+                        ${c.from && c.to ? ' → ' : ''}
+                        ${c.to ? '<strong>To:</strong> '+esc(c.to) : ''}
+                        ${!c.from && !c.subject ? '<span style="color:#94a3b8">ID: '+esc(c.convId)+'</span>' : ''}
+                    </div>
+                    <div class="conv-card-footer">
+                        <div class="conv-card-stats" id="convStats_${esc(c.convId)}">
+                            <span style="color:#94a3b8;font-style:italic">${CONFIG.frontProxyUrl ? 'Loading from Front...' : 'Front API not configured'}</span>
+                        </div>
+                        <div style="display:flex;gap:6px">
+                            ${c.type==='carrier'?'<button class="conv-open-btn" onclick="unlinkConversation(\''+r.id+'\',\''+esc(c.convId)+'\')" title="Unlink" style="background:#fee2e2;border-color:#fecaca;color:#dc2626">✕</button>':''}
+                            <button class="conv-open-btn" onclick="openFront('${esc(c.convId)}')">✉️ Open in Front</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('')}
+            </div>
+            <div class="link-carrier-section" onclick="showLinkCarrierPrompt('${r.id}')">
+                <div style="font-size:20px;margin-bottom:4px">🔗</div>
+                <div style="font-size:13px;font-weight:600;color:#374151">Link Carrier Email</div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:2px">Search Front conversations or enter ID manually</div>
+            </div>
+            <div id="linkCarrierForm" style="display:none;margin-top:8px;background:#f9fafb;border:1px solid #e2e8f0;border-radius:10px;padding:16px">
+                <div class="field">
+                    <label>Search Front Conversations</label>
+                    <input type="text" id="linkSearchQuery" placeholder="Search by carrier name, policy #, subject..." oninput="onLinkCarrierSearch(this.value,'${r.id}')">
+                    <div id="linkSearchResults" style="display:none;margin-top:8px;max-height:250px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;background:#fff"></div>
+                </div>
+                <div style="border-top:1px solid #e2e8f0;margin:12px 0;padding-top:12px">
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;font-weight:600">Or enter manually:</div>
+                    <div class="field"><label>Front Conversation ID</label><input type="text" id="linkConvId" placeholder="e.g. cnv_abc123"></div>
+                    <div class="field"><label>Email Subject</label><input type="text" id="linkSubject" placeholder="RE: Endorsement Request — ..."></div>
+                    <div class="field"><label>From Email</label><input type="text" id="linkFrom" placeholder="e.g. endorsements@travelers.com"></div>
+                    <div class="field"><label>To Email</label><input type="text" id="linkTo" placeholder="e.g. sarah@gibusa.com"></div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+                    <button class="btn btn-cancel" onclick="document.getElementById('linkCarrierForm').style.display='none'" style="padding:8px 14px;font-size:13px">Cancel</button>
+                    <button class="btn btn-save" onclick="linkCarrierConversation('${r.id}')" style="padding:8px 14px;font-size:13px">Link</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- REQUEST DETAILS -->
+        <div class="section">
+            <h3>📋 Request Details</h3>
+            <div class="field"><label>Request Type</label><select id="pType">${REQUEST_TYPES.map(t=>'<option value="'+t+'"'+(r.RequestType===t?' selected':'')+'>'+t+'</option>').join('')}</select></div>
+            <div class="field"><label>Priority</label><select id="pPriority"><option value="normal"${r.Priority==='normal'?' selected':''}>🟢 Normal</option><option value="high"${r.Priority==='high'?' selected':''}>🟠 High</option><option value="urgent"${r.Priority==='urgent'?' selected':''}>🔴 Urgent</option></select></div>
+            <div class="field"><label>Customer Deadline</label><input type="date" id="pDeadline" value="${r.Deadline?r.Deadline.split('T')[0]:''}"></div>
+            <div class="field"><label>Status</label><select id="pStatus">${STATUSES.map(s=>'<option value="'+s+'"'+(r.Status===s?' selected':'')+'>'+s+'</option>').join('')}</select></div>
+            <div class="field"><label>Assigned To</label><select id="pAssignee"><option value="">Unassigned</option>${siteUsers.slice(0,50).map(u=>'<option value="'+u.id+'"'+(r.AssignedId===u.id?' selected':'')+'>'+esc(u.name)+'</option>').join('')}</select></div>
+        </div>
+
+        <!-- CUSTOMER & POLICIES (LIVE AMS360) -->
+        <div class="section">
+            <h3>🔍 Customer & Policies (AMS360 Live)</h3>
+            <div class="field" style="position:relative">
+                <label>Customer Name <span style="font-weight:400;color:#94a3b8">— type to search AMS360</span></label>
+                <input type="text" id="pCustomer" value="${esc(r.CustomerName)}" placeholder="Start typing customer name..." oninput="onAmsCustomerSearch(this,'${r.id}')" onfocus="onAmsCustomerSearch(this,'${r.id}')">
+                <div id="amsResults" style="display:none"></div>
+            </div>
+            <div class="field"><label>Customer Email</label><input type="text" id="pEmail" value="${esc(r.CustomerEmail)}"></div>
+            <div class="field"><label>AMS360 Customer ID</label><input type="text" id="pAmsId" value="${esc(r.AmsCustomerId)}" placeholder="Auto-filled from search"></div>
+            <div class="field">
+                <label>Current Policies <span style="font-weight:400;color:#94a3b8" id="selectedPolCount">(${(r.policies||[]).length} on this request)</span></label>
+                <div id="policyList">
+                    ${(r.policies||[]).map((p,i)=>`
+                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+                            <input type="text" value="${esc(p.num)}" style="flex:2;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace" data-pol-num="${i}">
+                            <input type="text" value="${esc(p.type)}" style="flex:3;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" data-pol-type="${i}">
+                            <input type="text" value="${esc(p.carrier)}" style="flex:2;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" data-pol-carrier="${i}">
+                            <button onclick="this.parentElement.remove()" style="background:#fee2e2;border:1px solid #fecaca;border-radius:6px;padding:6px 10px;cursor:pointer;color:#dc2626;font-weight:600">✕</button>
+                        </div>
+                    `).join('')}
+                </div>
+                <button onclick="addPolicyRow()" style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:13px;color:#16a34a;font-weight:600;margin-top:4px">+ Add Policy Manually</button>
+            </div>
+            ${r.AmsCustomerId ? `<div class="field"><label>AMS360 Policies</label><div id="amsPolicyPicker"><div style="padding:10px;text-align:center;color:#94a3b8;font-size:13px">Search for a customer above or <span style="color:#3b82f6;cursor:pointer;text-decoration:underline" onclick="selectAmsCustomer('${esc(r.AmsCustomerId)}','${esc(r.CustomerName)}','${esc(r.CustomerEmail)}','${r.id}')">reload policies for ${esc(r.CustomerName)}</span></div></div></div>` : '<div class="field"><label>AMS360 Policies</label><div id="amsPolicyPicker"><div style="padding:14px;text-align:center;color:#94a3b8;font-size:13px;background:#f9fafb;border-radius:8px">Search for a customer above to see their AMS360 policies</div></div></div>'}
+        </div>
+
+        <div class="section"><h3>📝 Notes</h3><div class="field"><textarea id="pNotes">${esc(r.Notes)}</textarea></div></div>
+        <div class="section"><h3>Other</h3><div class="field"><label>Archived</label><select id="pArchived"><option value="false"${!r.Archived?' selected':''}>No</option><option value="true"${r.Archived?' selected':''}>Yes</option></select></div></div>
+    `;
+    document.getElementById('panel').classList.add('open');
+    document.getElementById('panelBg').classList.add('open');
+
+    // Kick off Front API refresh in background (if configured)
+    refreshConversationsFromFront(id);
+}
+
+function addPolicyRow(){
+    const list=document.getElementById('policyList');
+    if(!list)return;
+    const idx=list.children.length;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:6px';
+    row.innerHTML=`<input type="text" placeholder="Policy #" style="flex:2;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace" data-pol-num="${idx}"><input type="text" placeholder="Type" style="flex:3;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" data-pol-type="${idx}"><input type="text" placeholder="Carrier" style="flex:2;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" data-pol-carrier="${idx}"><button onclick="this.parentElement.remove()" style="background:#fee2e2;border:1px solid #fecaca;border-radius:6px;padding:6px 10px;cursor:pointer;color:#dc2626;font-weight:600">✕</button>`;
+    list.appendChild(row);
+}
+
+function openNewRequest(){
+    selected = null;
+    document.getElementById('panelTitle').textContent = 'New Certificate Request';
+    document.getElementById('panelBody').innerHTML = `
+        <div class="section"><h3>📋 Request Details</h3>
+            <div class="field"><label>Request Type</label><select id="pType">${REQUEST_TYPES.map(t=>'<option value="'+t+'">'+t+'</option>').join('')}</select></div>
+            <div class="field"><label>Priority</label><select id="pPriority"><option value="normal">🟢 Normal</option><option value="high">🟠 High</option><option value="urgent">🔴 Urgent</option></select></div>
+            <div class="field"><label>Customer Deadline</label><input type="date" id="pDeadline"></div>
+            <div class="field"><label>Status</label><select id="pStatus">${STATUSES.map(s=>'<option value="'+s+'">'+s+'</option>').join('')}</select></div>
+            <div class="field"><label>Assigned To</label><select id="pAssignee"><option value="">Unassigned</option>${siteUsers.slice(0,50).map(u=>'<option value="'+u.id+'">'+esc(u.name)+'</option>').join('')}</select></div>
+        </div>
+        <div class="section"><h3>🔍 Customer & Policies (AMS360 Live)</h3>
+            <div class="field" style="position:relative">
+                <label>Customer Name <span style="font-weight:400;color:#94a3b8">— type to search AMS360</span></label>
+                <input type="text" id="pCustomer" placeholder="Start typing customer name..." oninput="onAmsCustomerSearch(this,'__new__')" onfocus="onAmsCustomerSearch(this,'__new__')">
+                <div id="amsResults" style="display:none"></div>
+            </div>
+            <div class="field"><label>Customer Email</label><input type="text" id="pEmail" placeholder="Auto-filled from AMS360"></div>
+            <div class="field"><label>AMS360 Customer ID</label><input type="text" id="pAmsId" placeholder="Auto-filled from search"></div>
+            <div class="field">
+                <label>Policies <span style="font-weight:400;color:#94a3b8" id="selectedPolCount">(0 selected)</span></label>
+                <div id="policyList"></div>
+                <button onclick="addPolicyRow()" style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:13px;color:#16a34a;font-weight:600;margin-top:4px">+ Add Policy Manually</button>
+            </div>
+            <div class="field"><div id="amsPolicyPicker"><div style="padding:14px;text-align:center;color:#94a3b8;font-size:13px;background:#f9fafb;border-radius:8px">Search for a customer above to load their AMS360 policies</div></div></div>
+        </div>
+        <div class="section"><h3>📝 Notes</h3><div class="field"><textarea id="pNotes" placeholder="Details..."></textarea></div></div>
+    `;
+    document.getElementById('panel').classList.add('open');
+    document.getElementById('panelBg').classList.add('open');
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  SAVE REQUEST TO SHAREPOINT
+// ════════════════════════════════════════════════════════════════════
+async function saveRequest(){
+    // Collect policies from both AMS360 picker and manual entries
+    const policies = getSelectedPolicies();
+    const polFields = policiesToFields(policies);
+
+    const fields = {
+        Title:          document.getElementById('pCustomer').value + ' — ' + document.getElementById('pType').value,
+        RequestType:    document.getElementById('pType').value,
+        Priority:       document.getElementById('pPriority').value,
+        Deadline:       document.getElementById('pDeadline').value || null,
+        Status:         document.getElementById('pStatus').value,
+        CustomerName:   document.getElementById('pCustomer').value,
+        CustomerEmail:  document.getElementById('pEmail').value,
+        AmsCustomerId:  document.getElementById('pAmsId').value,
+        PolicyNums:     polFields.PolicyNums,
+        PolicyTypes:    polFields.PolicyTypes,
+        Carriers:       polFields.Carriers,
+        Notes:          document.getElementById('pNotes').value,
+    };
+
+    // Assignee
+    const assigneeId = document.getElementById('pAssignee').value;
+    const assignFieldName = await getAssignedFieldName();
+    fields[assignFieldName] = assigneeId ? parseInt(assigneeId) : null;
+
+    // Archived (edit only)
+    const archEl = document.getElementById('pArchived');
+    if(archEl) fields.Archived = archEl.value === 'true';
+
+    if(!fields.CustomerName){ toast('Customer name required','err'); return; }
+
+    try {
+        if(selected){
+            // Update existing
+            await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${selected.id}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
+            toast('Request updated!','ok');
+        } else {
+            // Generate RefId
+            const maxRef = requests.reduce((max,r) => {
+                const m = r.RefId?.match(/CERT-(\d+)/);
+                return m ? Math.max(max, parseInt(m[1])) : max;
+            }, 0);
+            fields.RefId = 'CERT-' + String(maxRef + 1).padStart(5,'0');
+
+            await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items`, { method:'POST', body:JSON.stringify({fields}) });
+            toast('Request created: ' + fields.RefId,'ok');
+        }
+        closePanel();
+        await refreshData(true);
+    } catch(e){ console.error('Save:', e); toast('Save failed','err'); }
+}
+
+function closePanel(){
+    document.getElementById('panel').classList.remove('open');
+    document.getElementById('panelBg').classList.remove('open');
+    selected = null;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  MARK RESPONSE AS READ
+// ════════════════════════════════════════════════════════════════════
+async function markRead(id, type){
+    try {
+        const field = type==='customer' ? {HasCustomerResponse:false} : {HasCarrierResponse:false};
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${id}/fields`, { method:'PATCH', body:JSON.stringify(field) });
+        const r = requests.find(x=>x.id===id);
+        if(r){
+            if(type==='customer') r.HasCustomerResponse = false;
+            if(type==='carrier') r.HasCarrierResponse = false;
+        }
+        toast('Marked as read','ok');
+        openPanel(id); updateStats(); applyFilters();
+    } catch(e){ toast('Update failed','err'); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  FRONT APP — Link, Unlink, Refresh conversations
+// ════════════════════════════════════════════════════════════════════
+function openFront(convId){
+    if(!convId){ toast('No Front conversation linked',''); return; }
+    window.open('https://app.frontapp.com/open/' + convId, '_blank');
+}
+
+function showLinkCarrierPrompt(reqId){
+    const form = document.getElementById('linkCarrierForm');
+    if(!form) return;
+    form.style.display = form.style.display==='none' ? 'block' : 'none';
+    if(form.style.display==='block'){
+        document.getElementById('linkConvId')?.focus();
+    }
+}
+
+async function linkCarrierConversation(reqId){
+    let convId = document.getElementById('linkConvId')?.value?.trim();
+    const subject = document.getElementById('linkSubject')?.value?.trim();
+    const from = document.getElementById('linkFrom')?.value?.trim();
+    const to = document.getElementById('linkTo')?.value?.trim();
+
+    if(!convId){ toast('Conversation ID is required','err'); return; }
+
+    // If user entered a message ID (msg_...), convert to conversation ID
+    if(convId.startsWith('msg_') && CONFIG.frontProxyUrl){
+        toast('Looking up conversation for message...','');
+        try {
+            // Front API: GET /messages/{msg_id} returns the conversation
+            const resp = await fetch(`${CONFIG.frontProxyUrl}/front-conversation`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId: convId })
+            });
+            if(resp.ok){
+                const data = await resp.json();
+                if(data.conversationId && data.conversationId.startsWith('cnv_')){
+                    convId = data.conversationId;
+                }
+            }
+        } catch(e){ console.warn('Could not look up message ID:', e); }
+    }
+
+    const r = requests.find(x=>x.id===reqId);
+    if(!r) return;
+
+    // If we have a convId but no subject, try to fetch from Front
+    let finalSubject = subject, finalFrom = from, finalTo = to;
+    if(convId && !subject && CONFIG.frontProxyUrl){
+        try {
+            const data = await fetchFrontConversation(convId);
+            if(data){
+                finalSubject = data.subject || '';
+                finalFrom = data.lastMessage?.from || '';
+                finalTo = data.lastMessage?.to || '';
+            }
+        } catch(e){}
+    }
+
+    // Add to conversations array
+    const convs = r.conversations || [];
+    convs.push({ convId, type:'carrier', subject:finalSubject||'', from:finalFrom||'', to:finalTo||'' });
+    const fields = conversationsToFields(convs);
+    fields.HasCarrierResponse = true;
+
+    try {
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${reqId}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
+        r.conversations = convs;
+        r.FrontConvIds = fields.FrontConversationIds;
+        r.FrontConvTypes = fields.FrontConversationTypes;
+        r.FrontConvSubjects = fields.FrontConvSubjects;
+        r.FrontConvFromEmails = fields.FrontConvFromEmails;
+        r.FrontConvToEmails = fields.FrontConvToEmails;
+        r.HasCarrierResponse = true;
+        toast('Carrier email linked!','ok');
+        openPanel(reqId); updateStats(); applyFilters();
+    } catch(e){ console.error(e); toast('Link failed','err'); }
+}
+
+// Front search for linking carrier emails
+let linkSearchTimeout = null;
+function onLinkCarrierSearch(query, reqId){
+    clearTimeout(linkSearchTimeout);
+    const resultsDiv = document.getElementById('linkSearchResults');
+    if(!resultsDiv) return;
+    if(!query || query.length < 2){ resultsDiv.style.display='none'; return; }
+
+    resultsDiv.style.display = 'block';
+    resultsDiv.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;font-size:13px">🔍 Searching Front...</div>';
+
+    linkSearchTimeout = setTimeout(async ()=>{
+        const results = await searchFrontConversations(query);
+        if(results.length === 0){
+            resultsDiv.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;font-size:13px">No conversations found</div>';
+        } else {
+            resultsDiv.innerHTML = results.map(c=>
+                `<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background 0.1s" onmouseover="this.style.background='#fff7ed'" onmouseout="this.style.background='#fff'" onclick="selectLinkConversation('${esc(c.conversationId)}','${esc((c.subject||'').replace(/'/g,"\\\\'"))}','${esc(c.lastFrom||'')}','${esc(c.recipient||'')}')">
+                    <div style="font-weight:600;color:#111827;font-size:13px">${esc(c.subject||'(no subject)')}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:3px">
+                        ${c.lastFrom ? 'From: '+esc(c.lastFrom) : ''} 
+                        ${c.recipient ? '→ '+esc(c.recipient) : ''}
+                        · ${c.messageCount} msg
+                        ${c.lastActivityAt ? '· '+fmtDateTime(c.lastActivityAt) : ''}
+                    </div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">${esc(c.conversationId)} ${c.tags?.length ? '· Tags: '+c.tags.join(', ') : ''}</div>
+                </div>`
+            ).join('');
+        }
+    }, 500);
+}
+
+function selectLinkConversation(convId, subject, from, to){
+    document.getElementById('linkConvId').value = convId;
+    document.getElementById('linkSubject').value = subject;
+    document.getElementById('linkFrom').value = from;
+    document.getElementById('linkTo').value = to;
+    document.getElementById('linkSearchResults').style.display = 'none';
+    document.getElementById('linkSearchQuery').value = '';
+    toast('Selected: ' + subject, '');
+}
+
+async function unlinkConversation(reqId, convId){
+    const r = requests.find(x=>x.id===reqId);
+    if(!r) return;
+
+    const convs = (r.conversations||[]).filter(c => c.convId !== convId);
+    const fields = conversationsToFields(convs);
+    // Recalculate response flags
+    fields.HasCarrierResponse = convs.some(c=>c.type==='carrier') ? r.HasCarrierResponse : false;
+
+    try {
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${reqId}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
+        r.conversations = convs;
+        r.FrontConvIds = fields.FrontConversationIds;
+        r.FrontConvTypes = fields.FrontConversationTypes;
+        r.FrontConvSubjects = fields.FrontConvSubjects;
+        r.FrontConvFromEmails = fields.FrontConvFromEmails;
+        r.FrontConvToEmails = fields.FrontConvToEmails;
+        r.HasCarrierResponse = fields.HasCarrierResponse;
+        toast('Conversation unlinked','ok');
+        openPanel(reqId); updateStats(); applyFilters();
+    } catch(e){ console.error(e); toast('Unlink failed','err'); }
+}
+
+// ── Front API Live (via Azure Function proxy) ──
+async function refreshConversationsFromFront(reqId){
+    if(!CONFIG.frontProxyUrl) return;
+
+    const r = requests.find(x=>x.id===reqId);
+    if(!r || !r.conversations?.length) return;
+
+    let updated = false;
+    for(const conv of r.conversations){
+        try {
+            const data = await fetchFrontConversation(conv.convId);
+            if(data){
+                if(data.subject && data.subject !== conv.subject){ conv.subject = data.subject; updated = true; }
+                if(data.lastMessage?.from){ conv.from = data.lastMessage.from; updated = true; }
+                if(data.lastMessage?.to){ conv.to = data.lastMessage.to; updated = true; }
+
+                // Update live stats in the card
+                const statsEl = document.getElementById('convStats_'+conv.convId);
+                if(statsEl){
+                    statsEl.innerHTML = `
+                        <span>📬 ${data.messageCount} message${data.messageCount!==1?'s':''}</span>
+                        <span>🕐 ${data.lastActivityAt ? fmtDateTime(data.lastActivityAt) : '—'}</span>
+                    `;
+                }
+                // Update subject in the card if it was empty
+                const subjEl = document.getElementById('convSubj_'+conv.convId);
+                if(subjEl && data.subject){
+                    subjEl.innerHTML = '📨 ' + esc(data.subject);
+                }
+                // Update from/to in the card
+                const metaEl = document.getElementById('convMeta_'+conv.convId);
+                if(metaEl && (data.lastMessage?.from || data.lastMessage?.to)){
+                    let metaHtml = '';
+                    if(data.lastMessage?.from) metaHtml += '<strong>From:</strong> ' + esc(data.lastMessage.from);
+                    if(data.lastMessage?.from && data.lastMessage?.to) metaHtml += ' → ';
+                    if(data.lastMessage?.to) metaHtml += '<strong>To:</strong> ' + esc(data.lastMessage.to);
+                    metaEl.innerHTML = metaHtml;
+                }
+            }
+        } catch(e){ console.warn('Front API fetch failed for', conv.convId, e); }
+    }
+
+    // Save updated subjects/from/to back to SharePoint
+    if(updated){
+        try {
+            const fields = conversationsToFields(r.conversations);
+            await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${reqId}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
+        } catch(e){ console.warn('Failed to save refreshed conversation data:', e); }
+    }
+}
+
+async function fetchFrontConversation(convId){
+    if(!CONFIG.frontProxyUrl || !convId) return null;
+    try {
+        const resp = await fetch(`${CONFIG.frontProxyUrl}/front-conversation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversationId: convId })
+        });
+        if(!resp.ok) return null;
+        return await resp.json();
+    } catch(e){
+        console.warn('fetchFrontConversation error:', e);
+        return null;
+    }
+}
+
+async function searchFrontConversations(query){
+    if(!CONFIG.frontProxyUrl || !query) return [];
+    try {
+        const resp = await fetch(`${CONFIG.frontProxyUrl}/front-search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
+        if(!resp.ok) return [];
+        const data = await resp.json();
+        return data.results || [];
+    } catch(e){
+        console.warn('searchFrontConversations error:', e);
+        return [];
+    }
+}
+
+// TODO: Front webhook handler (server-side, future phase)
+// When Front fires a webhook for new messages on tagged conversations:
+// 1. Check if conversation ID matches any CertTracker request
+// 2. Determine if sender is customer or carrier
+// 3. Update HasCustomerResponse / HasCarrierResponse in SharePoint
+// 4. If request status is Completed/Delivered and customer replied → set Status='In Review', ReopenedFrom=oldStatus
+
+// ════════════════════════════════════════════════════════════════════
+//  AMS360 LIVE API (via Azure Function proxy)
+// ════════════════════════════════════════════════════════════════════
+async function searchAMS360Customers(query){
+    if(!CONFIG.ams360ProxyUrl || query.length < 2) return [];
+    try {
+        const resp = await fetch(`${CONFIG.ams360ProxyUrl}/ams360-customer-search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
+        if(!resp.ok) throw new Error('Search failed: ' + resp.status);
+        const data = await resp.json();
+        return data.results || [];
+    } catch(e){
+        console.error('AMS360 customer search error:', e);
+        toast('AMS360 search failed','err');
+        return [];
+    }
+}
+
+async function getAMS360CustomerPolicies(customerId){
+    if(!CONFIG.ams360ProxyUrl || !customerId) return [];
+    try {
+        const resp = await fetch(`${CONFIG.ams360ProxyUrl}/ams360-customer-policies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customerId })
+        });
+        if(!resp.ok) throw new Error('Policy fetch failed: ' + resp.status);
+        const data = await resp.json();
+        return data.policies || [];
+    } catch(e){
+        console.error('AMS360 policies error:', e);
+        toast('AMS360 policy fetch failed','err');
+        return [];
+    }
+}
+
+async function getAMS360CustomerDetail(customerId){
+    if(!CONFIG.ams360ProxyUrl || !customerId) return null;
+    try {
+        const resp = await fetch(`${CONFIG.ams360ProxyUrl}/ams360-customer-detail`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customerId })
+        });
+        if(!resp.ok) throw new Error('Detail fetch failed: ' + resp.status);
+        return await resp.json();
+    } catch(e){
+        console.error('AMS360 customer detail error:', e);
+        return null;
+    }
+}
+
+// ── AMS360 Customer Search in Panel ──
+let amsSearchTimeout = null;
+function onAmsCustomerSearch(inputEl, reqId){
+    clearTimeout(amsSearchTimeout);
+    const query = inputEl.value.trim();
+    const resultsDiv = document.getElementById('amsResults');
+    if(!resultsDiv) return;
+    if(query.length < 2){ resultsDiv.style.display='none'; return; }
+
+    resultsDiv.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;font-size:13px">🔍 Searching AMS360...</div>';
+    resultsDiv.style.display = 'block';
+    resultsDiv.style.position = 'absolute';
+    resultsDiv.style.left = '0';
+    resultsDiv.style.right = '0';
+    resultsDiv.style.background = '#fff';
+    resultsDiv.style.border = '1px solid #e2e8f0';
+    resultsDiv.style.borderTop = 'none';
+    resultsDiv.style.borderRadius = '0 0 8px 8px';
+    resultsDiv.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+    resultsDiv.style.maxHeight = '300px';
+    resultsDiv.style.overflowY = 'auto';
+    resultsDiv.style.zIndex = '10';
+    resultsDiv.parentElement.style.position = 'relative';
+
+    amsSearchTimeout = setTimeout(async ()=>{
+        const results = await searchAMS360Customers(query);
+        if(results.length === 0){
+            resultsDiv.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;font-size:13px">No customers found in AMS360</div>';
+        } else {
+            resultsDiv.innerHTML = results.map(c=>
+                `<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background 0.1s" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background='#fff'" onclick="selectAmsCustomer('${esc(c.customerId)}','${esc(c.name.replace(/'/g,"\\\\'"))}','${esc(c.email||'')}','${reqId}')">
+                    <div style="font-weight:600;color:#111827">${esc(c.name)}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:2px">${esc(c.customerId)} ${c.email ? '· '+esc(c.email) : ''} ${c.phone ? '· '+esc(c.phone) : ''}</div>
+                </div>`
+            ).join('');
+        }
+    }, 400);
+}
+
+async function selectAmsCustomer(customerId, name, email, reqId){
+    document.getElementById('pCustomer').value = name;
+    if(document.getElementById('pEmail')) document.getElementById('pEmail').value = email;
+    if(document.getElementById('pAmsId')) document.getElementById('pAmsId').value = customerId;
+    const resultsDiv = document.getElementById('amsResults');
+    if(resultsDiv) resultsDiv.style.display = 'none';
+
+    // Load policies from AMS360
+    const pickerDiv = document.getElementById('amsPolicyPicker');
+    if(pickerDiv){
+        pickerDiv.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;font-size:13px">⏳ Loading policies from AMS360...</div>';
+    }
+
+    const policies = await getAMS360CustomerPolicies(customerId);
+
+    if(pickerDiv){
+        if(policies.length === 0){
+            pickerDiv.innerHTML = '<div style="padding:14px;text-align:center;color:#94a3b8;font-size:13px">No policies found for this customer</div>';
+        } else {
+            pickerDiv.innerHTML = `<div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:8px">Select policies for this cert request (${policies.length} found):</div>` +
+                policies.map(p=>
+                    `<div id="amspol_${esc(p.policyId)}" onclick="toggleAmsPolicy(this,'${esc(p.policyNumber)}','${esc(p.lineOfBusiness)}','${esc(p.parentCompany||p.companyName)}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:4px;cursor:pointer;transition:all 0.15s;background:#fff" onmouseover="if(!this.dataset.selected)this.style.borderColor='#86efac'" onmouseout="if(!this.dataset.selected)this.style.borderColor='#e2e8f0'">
+                        <div style="width:24px;height:24px;border:2px solid #d1d5db;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0" class="pol-check">+</div>
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:13px;font-weight:600;color:#111827;font-family:monospace">${esc(p.policyNumber)}</div>
+                            <div style="font-size:11px;color:#6b7280">${esc(p.lineOfBusiness)} · ${esc(p.parentCompany||p.companyName)} ${p.premium?'· $'+Number(p.premium).toLocaleString():''}</div>
+                            <div style="font-size:10px;color:#94a3b8">${p.effectiveDate?'Eff: '+fmtDate(p.effectiveDate):''} ${p.expirationDate?'→ Exp: '+fmtDate(p.expirationDate):''} ${p.status?'· '+esc(p.status):''}</div>
+                        </div>
+                    </div>`
+                ).join('');
+        }
+    }
+
+    // If editing an existing request, update it
+    if(reqId && reqId !== '__new__'){
+        const r = requests.find(x=>x.id===reqId);
+        if(r){
+            r.AmsCustomerId = customerId;
+            r.CustomerName = name;
+            r.CustomerEmail = email;
+        }
+    }
+}
+
+function toggleAmsPolicy(el, policyNum, policyType, carrier){
+    const isSelected = el.dataset.selected === 'true';
+    if(isSelected){
+        el.dataset.selected = 'false';
+        el.style.background = '#fff';
+        el.style.borderColor = '#e2e8f0';
+        el.querySelector('.pol-check').textContent = '+';
+        el.querySelector('.pol-check').style.borderColor = '#d1d5db';
+        el.querySelector('.pol-check').style.color = '#22c55e';
+    } else {
+        el.dataset.selected = 'true';
+        el.style.background = '#eff6ff';
+        el.style.borderColor = '#3b82f6';
+        el.querySelector('.pol-check').textContent = '✓';
+        el.querySelector('.pol-check').style.borderColor = '#3b82f6';
+        el.querySelector('.pol-check').style.color = '#3b82f6';
+    }
+    // Update selected count
+    updateSelectedPolicyCount();
+}
+
+function updateSelectedPolicyCount(){
+    const selected = document.querySelectorAll('#amsPolicyPicker [data-selected="true"]');
+    const countEl = document.getElementById('selectedPolCount');
+    if(countEl) countEl.textContent = `(${selected.length} selected)`;
+}
+
+function getSelectedPolicies(){
+    // Read from the AMS360 picker checkboxes
+    const selected = document.querySelectorAll('#amsPolicyPicker [data-selected="true"]');
+    const policies = [];
+    selected.forEach(el => {
+        const onclick = el.getAttribute('onclick')||'';
+        const match = onclick.match(/toggleAmsPolicy\(this,'([^']*)','([^']*)','([^']*)'\)/);
+        if(match){
+            policies.push({ num: match[1], type: match[2], carrier: match[3] });
+        }
+    });
+    // Also include manually entered policies from the policyList
+    const polRows = document.getElementById('policyList')?.children;
+    if(polRows){
+        for(const row of polRows){
+            const numInput = row.querySelector('[data-pol-num]');
+            const typeInput = row.querySelector('[data-pol-type]');
+            const carrInput = row.querySelector('[data-pol-carrier]');
+            if(numInput?.value){
+                const num = numInput.value.trim();
+                if(!policies.some(p=>p.num===num)){
+                    policies.push({ num, type:typeInput?.value?.trim()||'', carrier:carrInput?.value?.trim()||'' });
+                }
+            }
+        }
+    }
+    return policies;
+}
+
+// Close AMS360 dropdown when clicking outside
+document.addEventListener('click', e=>{
+    const amsResults = document.getElementById('amsResults');
+    if(amsResults && !e.target.closest('#pCustomer') && !e.target.closest('#amsResults')){
+        amsResults.style.display = 'none';
+    }
+    // Close inline popups
+    if(!e.target.closest('.inline-popup') && !e.target.closest('.req-cell') && !e.target.closest('[data-inline-policy]')){
+        document.querySelectorAll('.inline-popup').forEach(p=>p.remove());
+    }
+});
+
+// ════════════════════════════════════════════════════════════════════
+//  INLINE CUSTOMER SEARCH POPUP (on table REQUEST column click)
+// ════════════════════════════════════════════════════════════════════
+function openInlineCustomerSearch(reqId, tdEl){
+    document.querySelectorAll('.inline-popup').forEach(p=>p.remove());
+    const r = requests.find(x=>x.id===reqId);
+    if(!r) return;
+
+    const popup = document.createElement('div');
+    popup.className = 'inline-popup';
+    popup.style.cssText = 'position:absolute;top:100%;left:0;z-index:1000;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:360px;max-height:420px;overflow-y:auto';
+    popup.innerHTML = `
+        <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px">🔍 Assign Customer from AMS360</div>
+        ${r.CustomerName && r.CustomerName!=='Unknown' ? '<div style="font-size:12px;color:#6b7280;margin-bottom:8px">Current: <strong>'+esc(r.CustomerName)+'</strong></div>' : ''}
+        <input type="text" placeholder="Search customer name..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;box-sizing:border-box" oninput="searchInlineCustomer(this.value,'${reqId}')" autofocus>
+        <div id="inlineCustResults" style="margin-top:8px"></div>
+    `;
+    tdEl.appendChild(popup);
+    popup.querySelector('input').focus();
+}
+
+let inlineCustTimeout = null;
+function searchInlineCustomer(query, reqId){
+    clearTimeout(inlineCustTimeout);
+    const div = document.getElementById('inlineCustResults');
+    if(!div) return;
+    if(query.length < 2){ div.innerHTML = ''; return; }
+    div.innerHTML = '<div style="padding:10px;text-align:center;color:#94a3b8;font-size:12px">Searching...</div>';
+
+    inlineCustTimeout = setTimeout(async ()=>{
+        const results = await searchAMS360Customers(query);
+        if(!results.length){
+            div.innerHTML = '<div style="padding:10px;text-align:center;color:#94a3b8;font-size:12px">No customers found</div>';
+        } else {
+            div.innerHTML = results.map(c=>
+                `<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;border-radius:6px;transition:background 0.1s" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background=''" onclick="assignInlineCustomer('${reqId}','${esc(c.customerId)}','${esc(c.name.replace(/'/g,"\\\\'"))}','${esc(c.email||'')}')">
+                    <div style="font-weight:600;font-size:13px;color:#111827">${esc(c.name)}</div>
+                    <div style="font-size:11px;color:#6b7280">${c.city?esc(c.city)+', ':''}${c.state||''} ${c.phone?'· '+esc(c.phone):''}</div>
+                </div>`
+            ).join('');
+        }
+    }, 400);
+}
+
+async function assignInlineCustomer(reqId, customerId, name, email){
+    document.querySelectorAll('.inline-popup').forEach(p=>p.remove());
+    const r = requests.find(x=>x.id===reqId);
+    if(!r) return;
+
+    try {
+        const fields = { CustomerName: name, CustomerEmail: email, AmsCustomerId: customerId };
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${reqId}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
+        r.CustomerName = name;
+        r.CustomerEmail = email;
+        r.AmsCustomerId = customerId;
+        toast('Customer: ' + name, 'ok');
+        renderAll();
+    } catch(e){
+        toast('Failed to assign customer', 'err');
+        console.error(e);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  INLINE POLICY PICKER POPUP (on table POLICY column click)
+// ════════════════════════════════════════════════════════════════════
+const policyCache = {};
+async function openInlinePolicyPicker(reqId, tdEl){
+    // If popup already open for this request, don't reopen
+    if(tdEl.querySelector('.inline-popup')) return;
+    document.querySelectorAll('.inline-popup').forEach(p=>p.remove());
+    const r = requests.find(x=>x.id===reqId);
+    if(!r) return;
+
+    const popup = document.createElement('div');
+    popup.className = 'inline-popup';
+    popup.setAttribute('data-inline-policy','1');
+    popup.style.cssText = 'position:absolute;top:100%;left:0;z-index:1000;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:420px;max-height:450px;overflow-y:auto';
+    popup.onclick = function(e){ e.stopPropagation(); };
+
+    if(!r.AmsCustomerId){
+        popup.innerHTML = `
+            <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px">📋 Select Policies</div>
+            <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">Assign a customer first</div>
+        `;
+        tdEl.appendChild(popup);
+        return;
+    }
+
+    popup.innerHTML = '<div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px">📋 Loading policies...</div><div style="padding:20px;text-align:center;color:#94a3b8">⏳ Loading from AMS360...</div>';
+    tdEl.appendChild(popup);
+
+    // Use cache if available
+    let policies = policyCache[r.AmsCustomerId];
+    if(!policies){
+        policies = await getAMS360CustomerPolicies(r.AmsCustomerId);
+        policyCache[r.AmsCustomerId] = policies;
+    }
+    const existingNums = (r.policies||[]).map(p=>p.num);
+
+    if(!policies.length){
+        popup.innerHTML = '<div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px">📋 Policies</div><div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">No policies found</div>';
+        return;
+    }
+
+    popup.innerHTML = `
+        <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px">📋 Select Policies <span style="font-weight:400;color:#94a3b8;font-size:12px">(${policies.length} found)</span></div>
+        ${policies.map(p=>{
+            const isSelected = existingNums.includes(p.policyNumber);
+            return `<div data-polnum="${esc(p.policyNumber)}" data-poltype="${esc(p.lineOfBusiness)}" data-polcarrier="${esc(p.parentCompany||p.companyName)}" onclick="event.stopPropagation();toggleInlinePolicy(this)" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ${isSelected?'#3b82f6':'#e2e8f0'};border-radius:8px;margin-bottom:4px;cursor:pointer;background:${isSelected?'#eff6ff':'#fff'}" data-selected="${isSelected}">
+                <div style="width:22px;height:22px;border:2px solid ${isSelected?'#3b82f6':'#d1d5db'};border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;color:${isSelected?'#3b82f6':'#d1d5db'};flex-shrink:0">${isSelected?'✓':'+'}</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:600;font-family:monospace;color:#111827">${esc(p.policyNumber)}</div>
+                    <div style="font-size:11px;color:#6b7280">${esc(p.lineOfBusiness)} · ${esc(p.parentCompany||p.companyName)} ${p.premium?'· $'+Number(p.premium).toLocaleString():''}</div>
+                </div>
+            </div>`;
+        }).join('')}
+        <button onclick="event.stopPropagation();saveInlinePolicies('${reqId}')" style="width:100%;margin-top:10px;padding:10px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Save Policies</button>
+    `;
+}
+
+function toggleInlinePolicy(el){
+    const sel = el.dataset.selected === 'true';
+    el.dataset.selected = sel ? 'false' : 'true';
+    el.style.background = sel ? '#fff' : '#eff6ff';
+    el.style.borderColor = sel ? '#e2e8f0' : '#3b82f6';
+    el.children[0].textContent = sel ? '+' : '✓';
+    el.children[0].style.color = sel ? '#d1d5db' : '#3b82f6';
+    el.children[0].style.borderColor = sel ? '#d1d5db' : '#3b82f6';
+}
+
+async function saveInlinePolicies(reqId){
+    const r = requests.find(x=>x.id===reqId);
+    if(!r) return;
+
+    const selected = document.querySelectorAll('.inline-popup [data-selected="true"]');
+    const policies = [];
+    selected.forEach(el=>{
+        policies.push({ num: el.dataset.polnum, type: el.dataset.poltype, carrier: el.dataset.polcarrier });
+    });
+
+    const polFields = policiesToFields(policies);
+    try {
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${reqId}/fields`, { method:'PATCH', body:JSON.stringify(polFields) });
+        r.policies = policies;
+        r.PolicyNums = polFields.PolicyNums;
+        r.PolicyTypes = polFields.PolicyTypes;
+        r.Carriers = polFields.Carriers;
+        document.querySelectorAll('.inline-popup').forEach(p=>p.remove());
+        toast(policies.length + ' policies saved', 'ok');
+        renderAll();
+    } catch(e){
+        toast('Failed to save policies', 'err');
+        console.error(e);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  RENDER ALL
+// ════════════════════════════════════════════════════════════════════
+function renderAll(){
+    updateStats();
+    renderTabs();
+    applyFilters();
+}
+
+function toast(msg,type){
+    const t=document.getElementById('toast');
+    t.textContent=msg; t.className='toast show '+(type||'');
+    setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  IMPORT FROM FRONT (manual button + auto-poll)
+// ════════════════════════════════════════════════════════════════════
+let isImporting = false;
+async function importFromFront(){
+    if(isImporting) return;
+    isImporting = true;
+    const btn = document.getElementById('importFrontBtn');
+    if(btn) btn.textContent = '⏳ Importing...';
+    try {
+        const resp = await fetch(`${CONFIG.frontProxyUrl}/front-poll-now`);
+        if(!resp.ok) throw new Error('Poll failed: ' + resp.status);
+        const data = await resp.json();
+        const newCount = (data.created||[]).length;
+        const flagged = (data.flagged||[]).length;
+        const reopened = (data.reopened||[]).length;
+        let msg = '';
+        if(newCount) msg += newCount + ' new request' + (newCount>1?'s':'');
+        if(flagged) msg += (msg?' · ':'') + flagged + ' reply' + (flagged>1?'s':'') + ' flagged';
+        if(reopened) msg += (msg?' · ':'') + reopened + ' reopened';
+        if(!msg) msg = 'No new emails';
+        toast(msg, newCount||flagged||reopened ? 'ok' : '');
+        if(newCount || flagged || reopened) await loadRequests(true);
+    } catch(e){
+        console.error('Import from Front failed:', e);
+        toast('Import failed: ' + e.message, 'err');
+    } finally {
+        isImporting = false;
+        const btn = document.getElementById('importFrontBtn');
+        if(btn) btn.textContent = '📥 Import';
+    }
+}
+
+// Auto-poll Front every 3 minutes (browser-side)
+let frontPollInterval = null;
+function startFrontPoll(){
+    if(frontPollInterval) clearInterval(frontPollInterval);
+    frontPollInterval = setInterval(async ()=>{
+        if(isImporting) return;
+        try {
+            const resp = await fetch(`${CONFIG.frontProxyUrl}/front-poll-now`);
+            if(!resp.ok) return;
+            const data = await resp.json();
+            const newCount = (data.created||[]).length;
+            const flagged = (data.flagged||[]).length;
+            const reopened = (data.reopened||[]).length;
+            if(newCount || flagged || reopened){
+                toast((newCount?newCount+' new ':'')+(flagged?flagged+' replies ':'')+(reopened?reopened+' reopened':''), 'ok');
+                await loadRequests(true);
+            }
+        } catch(e){ console.warn('Auto-poll failed:', e); }
+    }, 3 * 60 * 1000);
+}
+
+// Start auto-poll when app loads (after first data load)
+const origStartAutoRefresh = startAutoRefresh;
+startAutoRefresh = function(){
+    origStartAutoRefresh();
+    startFrontPoll();
+};
+</script>
+</body>
+</html>
