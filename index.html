@@ -1198,7 +1198,27 @@ async function setStatus(id, status){
             if(fields.HasCustomerResponse!==undefined) r.HasCustomerResponse=fields.HasCustomerResponse;
             if(fields.HasCarrierResponse!==undefined) r.HasCarrierResponse=fields.HasCarrierResponse;
         }
-        toast('Status → '+status,'ok');
+        // Archive Front conversations when Completed
+        if(status === 'Completed' && r && CONFIG.frontProxyUrl){
+            const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
+            if(convIds.length){
+                try {
+                    await fetch(`${CONFIG.frontProxyUrl}/front-archive`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conversationIds: convIds })
+                    });
+                    toast('Status → '+status+' (Front archived)','ok');
+                } catch(e){ 
+                    console.warn('Front archive failed:', e);
+                    toast('Status → '+status,'ok');
+                }
+            } else {
+                toast('Status → '+status,'ok');
+            }
+        } else {
+            toast('Status → '+status,'ok');
+        }
         renderAll();
     } catch(e){ toast('Update failed','err'); console.error(e); }
 }
