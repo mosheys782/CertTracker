@@ -1181,13 +1181,23 @@ async function setStatus(id, status){
         if(status === 'Not Related'){
             fields.Archived = true;
         }
+        // When setting to Pending, clear response flags so new replies get detected
+        if(status.startsWith('Pending')){
+            fields.HasCustomerResponse = false;
+            fields.HasCarrierResponse = false;
+        }
         // Un-archive if moving away from Not Related
         const r = requests.find(x=>x.id===id);
         if(r && r.Archived && status !== 'Not Related'){
             fields.Archived = false;
         }
         await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${id}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
-        if(r){ r.Status=status; r.ReopenedFrom=''; if(fields.Archived!==undefined) r.Archived=fields.Archived; }
+        if(r){ 
+            r.Status=status; r.ReopenedFrom=''; 
+            if(fields.Archived!==undefined) r.Archived=fields.Archived;
+            if(fields.HasCustomerResponse!==undefined) r.HasCustomerResponse=fields.HasCustomerResponse;
+            if(fields.HasCarrierResponse!==undefined) r.HasCarrierResponse=fields.HasCarrierResponse;
+        }
         toast('Status → '+status,'ok');
         renderAll();
     } catch(e){ toast('Update failed','err'); console.error(e); }
@@ -1948,16 +1958,19 @@ function openInlineCustomerSearch(reqId, tdEl){
     const r = requests.find(x=>x.id===reqId);
     if(!r) return;
 
+    const rect = tdEl.getBoundingClientRect();
     const popup = document.createElement('div');
     popup.className = 'inline-popup';
-    popup.style.cssText = 'position:absolute;top:100%;left:0;z-index:1000;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:360px;max-height:420px;overflow-y:auto';
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const showAbove = spaceBelow < 300;
+    popup.style.cssText = `position:fixed;${showAbove?'bottom:'+(window.innerHeight-rect.top+4)+'px':'top:'+(rect.bottom+4)+'px'};left:${rect.left}px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:360px;max-height:380px;overflow-y:auto`;
     popup.innerHTML = `
         <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px">🔍 Assign Customer from AMS360</div>
         ${r.CustomerName && r.CustomerName!=='Unknown' ? '<div style="font-size:12px;color:#6b7280;margin-bottom:8px">Current: <strong>'+esc(r.CustomerName)+'</strong></div>' : ''}
         <input type="text" placeholder="Search customer name..." style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;box-sizing:border-box" oninput="searchInlineCustomer(this.value,'${reqId}')" autofocus>
         <div id="inlineCustResults" style="margin-top:8px"></div>
     `;
-    tdEl.appendChild(popup);
+    document.body.appendChild(popup);
     popup.querySelector('input').focus();
 }
 
@@ -2008,16 +2021,19 @@ async function assignInlineCustomer(reqId, customerId, name, email){
 // ════════════════════════════════════════════════════════════════════
 const policyCache = {};
 async function openInlinePolicyPicker(reqId, tdEl){
-    // If popup already open for this request, don't reopen
-    if(tdEl.querySelector('.inline-popup')) return;
+    // If popup already open, don't reopen
+    if(document.querySelector('.inline-popup[data-inline-policy]')) return;
     document.querySelectorAll('.inline-popup').forEach(p=>p.remove());
     const r = requests.find(x=>x.id===reqId);
     if(!r) return;
 
+    const rect = tdEl.getBoundingClientRect();
     const popup = document.createElement('div');
     popup.className = 'inline-popup';
     popup.setAttribute('data-inline-policy','1');
-    popup.style.cssText = 'position:absolute;top:100%;left:0;z-index:1000;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:420px;max-height:450px;overflow-y:auto';
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const showAbove = spaceBelow < 300;
+    popup.style.cssText = `position:fixed;${showAbove?'bottom:'+(window.innerHeight-rect.top+4)+'px':'top:'+(rect.bottom+4)+'px'};left:${rect.left}px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:420px;max-height:400px;overflow-y:auto`;
     popup.onclick = function(e){ e.stopPropagation(); };
 
     if(!r.AmsCustomerId){
@@ -2025,12 +2041,12 @@ async function openInlinePolicyPicker(reqId, tdEl){
             <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px">📋 Select Policies</div>
             <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">Assign a customer first</div>
         `;
-        tdEl.appendChild(popup);
+        document.body.appendChild(popup);
         return;
     }
 
     popup.innerHTML = '<div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:8px">📋 Loading policies...</div><div style="padding:20px;text-align:center;color:#94a3b8">⏳ Loading from AMS360...</div>';
-    tdEl.appendChild(popup);
+    document.body.appendChild(popup);
 
     // Use cache if available
     let policies = policyCache[r.AmsCustomerId];
