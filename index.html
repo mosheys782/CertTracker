@@ -771,6 +771,24 @@ async function loadRequests(silent=false){
             r.policies = parsePolicies(r);
             r.conversations = parseConversations(r);
         });
+
+        // Auto-assign unassigned requests to default assignee (Frimy)
+        const DEFAULT_ASSIGNEE_EMAIL = 'frimy@gibusa.com';
+        const defaultUser = siteUsers.find(u => u.email?.toLowerCase() === DEFAULT_ASSIGNEE_EMAIL.toLowerCase());
+        if(defaultUser){
+            const unassigned = requests.filter(r => !r.AssignedId && !r.Archived);
+            for(const r of unassigned){
+                try {
+                    await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${r.id}/fields`, { method:'PATCH', body:JSON.stringify({AssignedToLookupId: parseInt(defaultUser.id)}) });
+                    r.AssignedId = defaultUser.id;
+                    r.AssignedName = defaultUser.name;
+                } catch(e){
+                    console.warn('Auto-assign failed for', r.RefId, e.message);
+                }
+            }
+            if(unassigned.length > 0) console.log('Auto-assigned', unassigned.length, 'requests to', defaultUser.name);
+        }
+
         console.log('Loaded', requests.length, 'cert requests');
         buildAssigneeFilter();
         renderAll();
@@ -1101,6 +1119,7 @@ function renderTable(){
                 ${(r.policies||[]).length > 0 ? `
                     ${carriers.length ? '<div style="font-size:12px;font-weight:600;color:#111827">'+carriers.join(', ')+'</div>' : ''}
                     <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">${r.policies.map(p=>'<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;background:#f1f5f9;color:#475569;font-family:monospace">'+esc(p.num)+'</span>').join('')}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:2px">${(r.policies||[]).map(p=>p.type).filter((v,i,a)=>v&&a.indexOf(v)===i).join(', ')}</div>
                     ${r.AmsCustomerId?'<a class="ams-link" href="https://www.ams360.com/v2512561/NextGen/Customer/Detail/'+esc(r.AmsCustomerId)+'" target="_blank" onclick="event.stopPropagation()">🔗 AMS360</a>':''}
                 ` : `<div style="font-size:12px;color:#94a3b8;font-style:italic">No policy assigned</div>`}
             </td>
