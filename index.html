@@ -681,6 +681,7 @@ async function ensureColumnsExist(){
         { name: 'FrontConvFromEmails',   text: {} },
         { name: 'FrontConvToEmails',     text: {} },
         { name: 'EmailReceivedAt',       text: {} },
+        { name: 'LastActivityAt',        text: {} },
     ];
     try {
         const existing = await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`);
@@ -740,6 +741,7 @@ async function loadRequests(silent=false){
                     ReopenedFrom:   f.ReopenedFrom || '',
                     Deadline:       f.Deadline || '',
                     CreatedAt:      f.Created || item.createdDateTime || '',
+                    ModifiedAt:     item.lastModifiedDateTime || f.Modified || '',
                     AssignedId:     assignedId,
                     AssignedName:   assignedName,
                     Notes:          f.Notes || '',
@@ -762,6 +764,7 @@ async function loadRequests(silent=false){
                     SlaBreached:         f.SlaBreached || false,
                     Archived:            f.Archived || false,
                     EmailReceivedAt:     f.EmailReceivedAt || '',
+                    LastActivityAt:      f.LastActivityAt || '',
                 });
             });
             url = r['@odata.nextLink'] ? r['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
@@ -814,7 +817,7 @@ function buildAssigneeFilter(){
 //  AUTO-REFRESH (same pattern as Policy Mgmt)
 // ════════════════════════════════════════════════════════════════════
 let lastRefresh = Date.now(), refreshInterval = null, isRefreshing = false;
-const REFRESH_INTERVAL = 3*60*1000;
+const REFRESH_INTERVAL = 5*60*1000;
 const VISIBILITY_THRESHOLD = 60*1000;
 
 async function refreshData(silent=false){
@@ -1019,13 +1022,14 @@ function applyFilters(){
         return true;
     });
 
-    // Sort: responses on top, then newest email first
+    // Sort: responses on top, then by latest activity
     filtered.sort((a,b) => {
         // Responses bubble to top
         const aN=(a.HasCustomerResponse||a.HasCarrierResponse)?1:0, bN=(b.HasCustomerResponse||b.HasCarrierResponse)?1:0;
         if(aN!==bN) return bN-aN;
-        // Then by email received date, newest first
-        const dA=new Date(a.EmailReceivedAt||a.CreatedAt||0), dB=new Date(b.EmailReceivedAt||b.CreatedAt||0);
+        // By LastActivityAt (set on import, reply, status change), fall back to EmailReceivedAt
+        const dA=new Date(a.LastActivityAt||a.EmailReceivedAt||a.CreatedAt||0);
+        const dB=new Date(b.LastActivityAt||b.EmailReceivedAt||b.CreatedAt||0);
         return dB-dA;
     });
 
@@ -1087,7 +1091,7 @@ function renderTable(){
     body.innerHTML = items.map(r => {
         const ts = TYPE_STYLES[r.RequestType]||{cls:'cert',icon:'📜'};
         const badge = getDeadlineBadge(r.Deadline);
-        const age = getAge(r.EmailReceivedAt || r.CreatedAt);
+        const age = getAge(r.LastActivityAt || r.EmailReceivedAt || r.CreatedAt);
         const color = STATUS_COLORS[r.Status]||'#6b7280';
         const aName = r.AssignedName||'Unassigned';
         const ac = r.AssignedId ? acolor(r.AssignedId, r.AssignedName) : '#9ca3af';
@@ -1176,7 +1180,7 @@ function openStatusDD(id, el){
 async function setStatus(id, status){
     document.querySelectorAll('.status-dd').forEach(d=>d.remove());
     try {
-        const fields = { Status: status, ReopenedFrom: '' };
+        const fields = { Status: status, ReopenedFrom: '', LastActivityAt: new Date().toISOString() };
         // Auto-archive 'Not Related' only
         if(status === 'Not Related'){
             fields.Archived = true;
@@ -1193,7 +1197,7 @@ async function setStatus(id, status){
         }
         await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${id}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
         if(r){ 
-            r.Status=status; r.ReopenedFrom=''; 
+            r.Status=status; r.ReopenedFrom=''; r.LastActivityAt=fields.LastActivityAt;
             if(fields.Archived!==undefined) r.Archived=fields.Archived;
             if(fields.HasCustomerResponse!==undefined) r.HasCustomerResponse=fields.HasCustomerResponse;
             if(fields.HasCarrierResponse!==undefined) r.HasCarrierResponse=fields.HasCarrierResponse;
@@ -1417,6 +1421,22 @@ function openPanel(id){
         </div>
 
         <div class="section"><h3>📝 Notes</h3><div class="field"><textarea id="pNotes">${esc(r.Notes)}</textarea></div></div>
+
+        <!-- ACTIVITY LOG -->
+        <div class="section">
+            <h3>📊 Activity Log</h3>
+            <div style="font-size:12px;color:#6b7280;line-height:1.8">
+                <div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">📥 <strong>Imported:</strong> ${r.CreatedAt?fmtDateTime(r.CreatedAt):'—'} ${r.Notes&&r.Notes.includes('webhook')?'<span style="background:#dbeafe;color:#2563eb;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600">WEBHOOK</span>':r.Notes&&r.Notes.includes('poll')?'<span style="background:#fef3c7;color:#d97706;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600">POLL</span>':''}</div>
+                <div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">📧 <strong>Email received:</strong> ${r.EmailReceivedAt?fmtDateTime(r.EmailReceivedAt):'—'}</div>
+                <div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">✏️ <strong>Last modified:</strong> ${r.ModifiedAt?fmtDateTime(r.ModifiedAt):'—'}</div>
+                <div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">📋 <strong>Status:</strong> ${esc(r.Status)} ${r.ReopenedFrom?'<span style="color:#d97706">⚡ from '+esc(r.ReopenedFrom)+'</span>':''}</div>
+                ${r.HasCustomerResponse?'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">💬 <strong>Customer reply detected</strong></div>':''}
+                ${r.HasCarrierResponse?'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">🏢 <strong>Carrier reply detected</strong></div>':''}
+                ${r.CustomerName?'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">👤 <strong>Customer:</strong> '+esc(r.CustomerName)+(r.AmsCustomerId?' (AMS360 linked)':'')+'</div>':''}
+                ${(r.policies||[]).length?'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">📋 <strong>Policies:</strong> '+(r.policies||[]).map(p=>p.num).join(', ')+'</div>':''}
+                <div style="display:flex;gap:8px;align-items:center;padding:4px 0">🆔 <strong>Ref:</strong> ${esc(r.RefId)} · <strong>SP ID:</strong> ${r.id}</div>
+            </div>
+        </div>
         <div class="section"><h3>Other</h3><div class="field"><label>Archived</label><select id="pArchived"><option value="false"${!r.Archived?' selected':''}>No</option><option value="true"${r.Archived?' selected':''}>Yes</option></select></div></div>
     `;
     document.getElementById('panel').classList.add('open');
