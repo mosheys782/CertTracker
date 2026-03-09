@@ -1216,6 +1216,24 @@ async function setStatus(id, status){
             } else {
                 toast('Status → '+status,'ok');
             }
+        // Remove Certificates tag and add Frimy when Not Related
+        } else if(status === 'Not Related' && r && CONFIG.frontProxyUrl){
+            const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
+            if(convIds.length){
+                try {
+                    await fetch(`${CONFIG.frontProxyUrl}/front-not-related`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conversationIds: convIds })
+                    });
+                    toast('Status → Not Related (tag removed, Frimy added)','ok');
+                } catch(e){
+                    console.warn('Front not-related action failed:', e);
+                    toast('Status → '+status,'ok');
+                }
+            } else {
+                toast('Status → '+status,'ok');
+            }
         } else {
             toast('Status → '+status,'ok');
         }
