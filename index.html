@@ -881,7 +881,7 @@ function changePageSize(size){
 // ════════════════════════════════════════════════════════════════════
 function updateStats(){
     const today = new Date(); today.setHours(0,0,0,0);
-    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status));
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && r.Status!=='Completed');
     const counts = {
         newReq:     active.filter(r => r.Status==='New Request').length,
         pastDue:    active.filter(r => { const d=new Date(r.Deadline);d.setHours(0,0,0,0); return d<today; }).length,
@@ -943,7 +943,12 @@ function renderTabs(){
     ).join('');
 }
 function switchTab(t){ tab=t; statFilter=null; page=1; renderTabs(); applyFilters(); }
-function toggleStatFilter(key){ statFilter = statFilter===key?null:key; if(statFilter)tab='allCerts'; page=1; renderTabs(); applyFilters(); updateStats(); }
+function toggleStatFilter(key){ 
+    statFilter = statFilter===key?null:key; 
+    if(statFilter==='completed') tab='completed';
+    else if(statFilter) tab='allCerts'; 
+    page=1; renderTabs(); applyFilters(); updateStats(); 
+}
 function toggleNotifFilter(){ statFilter = statFilter==='custResp'?'carrResp':'custResp'; tab='allCerts'; page=1; renderTabs(); applyFilters(); updateStats(); }
 
 // ════════════════════════════════════════════════════════════════════
