@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 8;
+    var FORCE_REFRESH_VERSION = 21;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -60,6 +60,45 @@
         .notif-bell .badge{position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #1e293b}
 
         /* ═══ SLA BANNER ═══ */
+        /* ═══ TODAY BANNER ═══ */
+        .today-bar{background:#fff;border-radius:12px;padding:12px 20px;margin-bottom:12px;display:flex;align-items:center;gap:16px;box-shadow:0 1px 3px rgba(0,0,0,0.1);cursor:pointer;transition:box-shadow 0.15s}
+        .today-bar:hover{box-shadow:0 4px 14px rgba(0,0,0,0.12)}
+        .today-bar .tb-icon{font-size:22px}
+        .today-bar .tb-main{font-size:15px;font-weight:700;color:#111827}
+        .today-bar .tb-heb{font-size:13px;color:#6b7280;direction:rtl}
+        .today-bar .tb-hol{padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600}
+        .today-bar .tb-candle{font-size:12px;color:#7c3aed;font-weight:600}
+        .today-bar .tb-closed{background:#fef2f2;color:#dc2626;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600}
+        .today-bar .tb-parsha{font-size:12px;color:#0891b2;direction:rtl;font-weight:600}
+        /* ═══ CALENDAR MODAL ═══ */
+        .cal-modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:center;justify-content:center}
+        .cal-box{background:#fff;border-radius:16px;width:640px;max-width:96vw;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 25px 60px rgba(0,0,0,0.25)}
+        .cal-hdr{padding:18px 22px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #e2e8f0}
+        .cal-nav{background:none;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px}
+        .cal-nav:hover{background:#f1f5f9}
+        .cal-month-title{flex:1;text-align:center;font-size:17px;font-weight:700;color:#111827}
+        .cal-body{padding:16px;overflow-y:auto;flex:1}
+        .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+        .cal-dow{text-align:center;font-size:11px;font-weight:600;color:#94a3b8;padding:4px 0;text-transform:uppercase}
+        .cal-day{border-radius:8px;padding:6px 5px;min-height:72px;cursor:pointer;transition:background 0.12s;border:1px solid transparent;position:relative}
+        .cal-day:hover{background:#f0f9ff;border-color:#bae6fd}
+        .cal-day.today{background:#eff6ff;border-color:#3b82f6}
+        .cal-day.selected{background:#dbeafe;border-color:#2563eb}
+        .cal-day.closed{background:#fff1f2}
+        .cal-day.weekend{background:#fafafa}
+        .cal-day.other-month{opacity:0.35}
+        .cal-day-num{font-size:13px;font-weight:600;color:#374151}
+        .cal-day.today .cal-day-num{color:#2563eb}
+        .cal-day-heb{font-size:9px;color:#94a3b8;direction:rtl}
+        .cal-day-hol{font-size:9px;color:#d97706;direction:rtl;font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .cal-day-candle{font-size:9px;color:#7c3aed;font-weight:600;margin-top:1px}
+        .cal-day-closed-dot{width:6px;height:6px;border-radius:50%;background:#ef4444;position:absolute;top:5px;right:5px}
+        .cal-day-cnt{font-size:10px;background:#2563eb;color:#fff;border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px}
+        .cal-closed-panel{border-top:1px solid #e2e8f0;padding:16px 22px}
+        .cal-closed-panel h4{font-size:13px;font-weight:700;color:#374151;margin:0 0 8px}
+        .cal-closed-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+        .cal-closed-tag{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:3px 10px;font-size:12px;display:flex;align-items:center;gap:5px}
+        .cal-closed-tag button{background:none;border:none;cursor:pointer;color:#ef4444;font-size:14px;line-height:1;padding:0}
         .sla-banner{background:#fff;border-radius:12px;padding:18px 24px;margin-bottom:20px;display:flex;align-items:center;gap:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);flex-wrap:wrap}
         .sla-item{display:flex;align-items:center;gap:10px}
         .sla-item .sla-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
@@ -293,6 +332,91 @@
             </div>
         </header>
 
+        <!-- Today Banner -->
+        <div class="today-bar" id="todayBar" title="Click to open calendar">
+            <span class="tb-icon" onclick="openCalendarModal()" style="cursor:pointer">📅</span>
+            <div style="flex:1" onclick="openCalendarModal()" style="cursor:pointer">
+                <div class="tb-main" id="tbMain">Loading...</div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
+                    <span class="tb-heb" id="tbHeb"></span>
+                    <div id="tbBadges" style="display:contents"></div>
+                </div>
+            </div>
+            <button onclick="toggleClosedDaysPanel(event)" id="tbClosedBtn" style="flex-shrink:0;padding:5px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
+                🚫 <span id="tbClosedCount">0</span> Closed Days
+            </button>
+        </div>
+
+        <!-- Closed Days Panel (shown below banner) -->
+        <div id="closedDaysPanel" style="display:none;background:#fff;border-radius:12px;padding:16px 20px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);border:1px solid #fca5a5">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <span style="font-size:14px;font-weight:700;color:#dc2626">🚫 Office Closed Days</span>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <div style="display:flex;gap:6px;align-items:center">
+                        <input type="date" id="cdAddDate" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">
+                        <input type="text" id="cdAddReason" placeholder="Reason (optional)" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;width:160px">
+                        <button onclick="cdAddDay()" style="padding:5px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">+ Add</button>
+                    </div>
+                    <button onclick="toggleClosedDaysPanel(event)" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1">✕</button>
+                </div>
+            </div>
+            <div id="closedDaysList" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <!-- Calendar Modal -->
+        <div class="cal-modal" id="calModal" style="display:none" onclick="if(event.target===this)closeCalendarModal()">
+            <div class="cal-box">
+                <div class="cal-hdr">
+                    <button class="cal-nav" onclick="calNav(-1);_showMonthPicker=false">◀</button>
+                    <button id="calMonthBtn" onclick="toggleMonthPicker()" style="flex:1;background:none;border:1px solid #e2e8f0;border-radius:8px;padding:6px 14px;cursor:pointer;text-align:center">
+                        <span style="font-size:16px;font-weight:700;color:#0f172a" id="calMonthTitle"></span>
+                        <span style="font-size:12px;color:#9ca3af;font-weight:500;margin-left:8px;direction:rtl" id="calHebTitle"></span>
+                    </button>
+                    <button class="cal-nav" onclick="calNav(1);_showMonthPicker=false">▶</button>
+                    <button onclick="calGoToday()" style="margin-left:4px;padding:4px 9px;background:rgba(59,130,246,.1);border:none;border-radius:6px;color:#2563eb;font-size:11px;font-weight:700;cursor:pointer">Today</button>
+                    <button onclick="toggleZmanPicker()" id="calZmanBtn" style="margin-left:4px;padding:4px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:10px;color:#64748b;cursor:pointer">📍 <span id="calZmanName">New York</span></button>
+                    <button onclick="closeCalendarModal()" style="margin-left:4px;background:#f1f5f9;border:none;font-size:14px;cursor:pointer;color:#64748b;padding:4px 8px;border-radius:6px">✕</button>
+                </div>
+                <!-- Month/Year Picker -->
+                <div id="calMonthPicker" style="display:none;padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0">
+                    <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px">
+                        <button onclick="_calYear--;renderCalendar()" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:2px 12px;cursor:pointer;font-size:14px;font-weight:700">‹</button>
+                        <span id="calPickerYear" style="font-size:15px;font-weight:700;color:#0f172a;min-width:50px;text-align:center"></span>
+                        <button onclick="_calYear++;renderCalendar()" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:2px 12px;cursor:pointer;font-size:14px;font-weight:700">›</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px" id="calMonthGrid"></div>
+                </div>
+                <!-- Zman Picker -->
+                <div id="calZmanPicker" style="display:none;padding:10px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:none">
+                    <div style="font-size:11px;color:#64748b;font-weight:600;margin-bottom:6px">🕯 Candle Lighting Location:</div>
+                    <div id="calZmanGrid" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+                </div>
+                <div class="cal-body">
+                    <div class="cal-grid" id="calGridDow">
+                        <div class="cal-dow">Sun</div><div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div>
+                    </div>
+                    <div class="cal-grid" id="calGrid"></div>
+                </div>
+                <div class="cal-closed-panel">
+                    <!-- Selected day detail -->
+                    <div id="calSelDayPanel" style="display:none;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0">
+                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                                <span id="calSelDayTitle" style="font-size:13px;font-weight:700;color:#1e40af"></span>
+                                <div id="calSelDayBadges" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px">
+                                <button id="calMarkClosedBtn" onclick="toggleSelDayClosed()" style="border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid"></button>
+                                <button onclick="calDayFilter()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;color:#2563eb;cursor:pointer">🔍 Filter emails</button>
+                                <button onclick="_calSelectedDay=null;document.getElementById('calSelDayPanel').style.display='none';renderCalendar()" style="background:#f1f5f9;border:none;border-radius:4px;padding:3px 8px;cursor:pointer;color:#64748b;font-size:11px">✕</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
         <!-- SLA Banner -->
         <div class="sla-banner">
             <div class="sla-item"><div class="sla-icon" style="background:#dbeafe;color:#2563eb">⏱️</div><div><div class="sla-label">Avg Turnaround</div><div class="sla-val" id="slaAvg" style="color:#2563eb">—</div></div></div>
@@ -407,6 +531,155 @@ const ACTIVE_STATUSES = ['New Request','In Review','Pending – Endorsement','Pe
 const DONE_STATUSES = ['Completed','Delivered'];
 const REPLIED_STATUSES = ['Customer Replied','Carrier Replied'];
 
+
+// ════════════════════════════════════════════════════════════════════
+//  HEBREW CALENDAR LIBRARY (ported from OpsPay)
+// ════════════════════════════════════════════════════════════════════
+function pad2(n){return String(n).padStart(2,'0');}
+function toISO2(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
+function daysInMonth(y,m){return new Date(y,m+1,0).getDate();}
+function toHebNum(n){var ones=['','א','ב','ג','ד','ה','ו','ז','ח','ט'];var tens=['','י','כ','ל','מ','נ','ס','ע','פ','צ'];var hundreds=['','ק','ר','ש','ת','תק','תר','תש','תת','תתק'];if(n<=0)return'';var s='';if(n>=100){s+=hundreds[Math.floor(n/100)];n=n%100;}if(n===15)return s+'ט״ו';if(n===16)return s+'ט״ז';if(n>=10){s+=tens[Math.floor(n/10)];n=n%10;}s+=ones[n];if(s.length===1)return s+'׳';if(s.length>1)return s.slice(0,-1)+'״'+s.slice(-1);return s;}
+function toHebYear(hy){return toHebNum(hy%1000);}
+function hebrewMonthName(m){return['ניסן','אייר','סיון','תמוז','אב','אלול','תשרי','חשון','כסלו','טבת','שבט','אדר','אדר ב'][m-1]||'';}
+function isHebLeapYear(hy){return((7*hy+1)%19)<7;}
+function hebElapsedDays(hy){var months=Math.floor((235*hy-234)/19);var parts=12084+13753*months;var day=29*months+Math.floor(parts/25920);if(3*(day+1)%7<3)day++;return day;}
+function hebYearDays(hy){return hebElapsedDays(hy+1)-hebElapsedDays(hy);}
+function hebMonthDays(hy,hm){if([2,4,6,10,13].indexOf(hm)!==-1)return 29;if(hm===12&&!isHebLeapYear(hy))return 29;if(hm===8){var yd=hebYearDays(hy);return(yd%10===5)?30:29;}if(hm===9){var yd2=hebYearDays(hy);return(yd2%10===3)?29:30;}return 30;}
+var _ghCache={};
+function gregToHeb(year,month,day){var gk=year*10000+month*100+day;if(_ghCache[gk])return _ghCache[gk];var jd=gregToJD(year,month+1,day);var hy=year+3761;var t1=hebNewYearJD(hy);if(jd<t1){hy--;t1=hebNewYearJD(hy);}var next=hebNewYearJD(hy+1);if(jd>=next){hy++;t1=next;}var doy=jd-t1;var mo=[7,8,9,10,11,12];if(isHebLeapYear(hy))mo.push(13);mo=mo.concat([1,2,3,4,5,6]);var acc=0;for(var i=0;i<mo.length;i++){var md=hebMonthDays(hy,mo[i]);if(doy<acc+md){var r={year:hy,month:mo[i],day:doy-acc+1};_ghCache[gk]=r;return r;}acc+=md;}var fb={year:hy,month:6,day:29};_ghCache[gk]=fb;return fb;}
+function gregToJD(y,m,d){if(m<=2){y--;m+=12;}var A=Math.floor(y/100);var B=2-A+Math.floor(A/4);return Math.floor(365.25*(y+4716))+Math.floor(30.6001*(m+1))+d+B-1524.5;}
+function hebNewYearJD(hy){return hebElapsedDays(hy)+347997.5;}
+var _holCache={};
+function getJewishHolidays(gYear){if(_holCache[gYear])return _holCache[gYear];var hols={};for(var m=0;m<12;m++){var dim=daysInMonth(gYear,m);for(var d=1;d<=dim;d++){var h=gregToHeb(gYear,m,d);var key=gYear+'-'+pad2(m+1)+'-'+pad2(d);var hol=null;if(h.month===7&&h.day===1)hol='ראש השנה';if(h.month===7&&h.day===2)hol='ראש השנה ב';if(h.month===7&&h.day===3)hol='צום גדליה';if(h.month===7&&h.day===10)hol='יום כיפור';if(h.month===7&&h.day===15)hol='סוכות';if(h.month===7&&h.day===16)hol='סוכות ב';if(h.month===7&&h.day===21)hol='הושענא רבה';if(h.month===7&&h.day===22)hol='שמיני עצרת';if(h.month===7&&h.day===23)hol='שמחת תורה';if(h.month===7&&h.day>=17&&h.day<=20)hol='חול המועד סוכות';if(h.month===9&&h.day===25)hol='חנוכה';if(h.month===9&&h.day>=26&&h.day<=30)hol='חנוכה';if(h.month===10&&h.day<=2)hol='חנוכה';if(h.month===10&&h.day===10)hol='עשרה בטבת';if(h.month===11&&h.day===15)hol='ט״ו בשבט';if(h.month===12&&!isHebLeapYear(h.year)&&h.day===13)hol='תענית אסתר';if(h.month===12&&!isHebLeapYear(h.year)&&h.day===14)hol='פורים';if(h.month===12&&!isHebLeapYear(h.year)&&h.day===15)hol='שושן פורים';if(h.month===13&&h.day===13)hol='תענית אסתר';if(h.month===13&&h.day===14)hol='פורים';if(h.month===13&&h.day===15)hol='שושן פורים';if(h.month===1&&h.day===15)hol='פסח';if(h.month===1&&h.day===16)hol='פסח ב';if(h.month===1&&h.day>=17&&h.day<=20)hol='חול המועד פסח';if(h.month===1&&h.day===21)hol='פסח ז';if(h.month===1&&h.day===22)hol='פסח ח';if(h.month===2&&h.day===5)hol='יום העצמאות';if(h.month===2&&h.day===18)hol='ל״ג בעומר';if(h.month===3&&h.day===6)hol='שבועות';if(h.month===3&&h.day===7)hol='שבועות ב';if(h.month===4&&h.day===17)hol='שבעה עשר בתמוז';if(h.month===5&&h.day===9)hol='תשעה באב';if(h.month===5&&h.day===15)hol='ט״ו באב';if(hol)hols[key]=hol;}}
+_holCache[gYear]=hols;return hols;}
+var OFFICE_CLOSED_HOLS=['ראש השנה','ראש השנה ב','יום כיפור','סוכות','סוכות ב','שמיני עצרת','שמחת תורה','פסח','פסח ב','פסח ז','פסח ח','שבועות','שבועות ב'];
+function getSpecialShabbos(gY,gM,gD){
+    var specials=[];
+    var h=gregToHeb(gY,gM,gD);
+    var hy=h.year,hm=h.month,hd=h.day;
+    var dCur=hebMonthDays(hy,hm);
+    // Shabbos Mevorchim
+    if(hd>=dCur-6&&hd<=dCur){var nm=hm;if(hm===6){}else if(hm===12&&!isHebLeapYear(hy)){specials.push('שבת מברכים');}else if(hm===13){specials.push('שבת מברכים');}else{specials.push('שבת מברכים');}}
+    // Shabbos Shuvah
+    if(hm===7&&hd>=3&&hd<=9)specials.push('שבת שובה');
+    // Shabbos HaGadol
+    if(hm===1&&hd>=8&&hd<=14)specials.push('שבת הגדול');
+    // Shabbos Chazon / Nachamu
+    if(hm===5&&hd>=2&&hd<=8)specials.push('שבת חזון');
+    if(hm===5&&hd>=10&&hd<=16)specials.push('שבת נחמו');
+    var adar=isHebLeapYear(hy)?13:12;
+    // Shekalim: 1 Adar or last Shabbos before
+    if(hm===adar&&hd===1)specials.push('שבת שקלים');
+    if(hm===(adar===13?12:11)){var dm2=hebMonthDays(hy,hm);if(dm2-hd>=0&&dm2-hd<7){var jd1A=hebNewYearJD(hy);var mo2=[7,8,9,10,11,12];if(isHebLeapYear(hy))mo2.push(13);mo2=mo2.concat([1,2,3,4,5,6]);var a2=0;for(var mi=0;mi<mo2.length;mi++){if(mo2[mi]===adar)break;a2+=hebMonthDays(hy,mo2[mi]);}jd1A+=a2;var dow1A=Math.round(jd1A+1.5)%7;if(dow1A!==6)specials.push('שבת שקלים');}}
+    // Zachor, Parah, HaChodesh
+    if(hm===adar&&hd>=8&&hd<=13)specials.push('שבת זכור');
+    if(hm===adar&&hd>=15&&hd<=21)specials.push('שבת פרה');
+    if(hm===1&&hd===1)specials.push('שבת החודש');
+    if(hm===adar&&hd>=23&&hd<=hebMonthDays(hy,adar))specials.push('שבת החודש');
+    return specials;
+}
+var PARSHIYOS=['בראשית','נח','לך לך','וירא','חיי שרה','תולדות','ויצא','וישלח','וישב','מקץ','ויגש','ויחי','שמות','וארא','בא','בשלח','יתרו','משפטים','תרומה','תצוה','כי תשא','ויקהל','פקודי','ויקרא','צו','שמיני','תזריע','מצורע','אחרי מות','קדושים','אמור','בהר','בחקתי','במדבר','נשא','בהעלתך','שלח','קרח','חקת','בלק','פינחס','מטות','מסעי','דברים','ואתחנן','עקב','ראה','שופטים','כי תצא','נצבים','וילך','האזינו'];
+var _parshaCache={};
+function getParshaForShabbat(gY,gM,gD){var pk=gY+'-'+gM+'-'+gD;if(_parshaCache[pk])return _parshaCache[pk];var h=gregToHeb(gY,gM,gD);var hy=h.year;var jdS=gregToJD(gY,gM+1,gD);var stHy=hy;var jdST=hebNewYearJD(stHy)+22;if(jdS<jdST){stHy--;jdST=hebNewYearJD(stHy)+22;}var d=new Date((jdST-2440587.5)*86400000);while(d.getDay()!==6)d=new Date(d.getTime()+86400000);var jdB=gregToJD(d.getFullYear(),d.getMonth()+1,d.getDate());var wk=Math.round((jdS-jdB)/7);if(wk<0||wk>=PARSHIYOS.length)return'';var r=PARSHIYOS[wk]||'';_parshaCache[pk]=r;return r;}
+var _bankHolCache={};
+function getUSBankHolidays(gYear){if(_bankHolCache[gYear])return _bankHolCache[gYear];var h={};h[gYear+'-01-01']="New Year's Day";var jan1=new Date(gYear,0,1);var mlk=new Date(gYear,0,1+((1-jan1.getDay()+7)%7)+14);h[toISO2(mlk)]='MLK Day';var feb1=new Date(gYear,1,1);var pres=new Date(gYear,1,1+((1-feb1.getDay()+7)%7)+14);h[toISO2(pres)]="Presidents' Day";var may31=new Date(gYear,4,31);while(may31.getDay()!==1)may31=new Date(may31.getTime()-86400000);h[toISO2(may31)]='Memorial Day';var j19=new Date(gYear,5,19);if(j19.getDay()===6)j19=new Date(j19.getTime()-86400000);if(j19.getDay()===0)j19=new Date(j19.getTime()+86400000);h[toISO2(j19)]='Juneteenth';var j4=new Date(gYear,6,4);if(j4.getDay()===6)j4=new Date(j4.getTime()-86400000);if(j4.getDay()===0)j4=new Date(j4.getTime()+86400000);h[toISO2(j4)]='Independence Day';var sep1=new Date(gYear,8,1);var labor=new Date(gYear,8,1+((1-sep1.getDay()+7)%7));h[toISO2(labor)]='Labor Day';var oct1=new Date(gYear,9,1);var col=new Date(gYear,9,1+((1-oct1.getDay()+7)%7)+7);h[toISO2(col)]='Columbus Day';var nov11=new Date(gYear,10,11);if(nov11.getDay()===6)nov11=new Date(nov11.getTime()-86400000);if(nov11.getDay()===0)nov11=new Date(nov11.getTime()+86400000);h[toISO2(nov11)]='Veterans Day';var nov1=new Date(gYear,10,1);var thx=new Date(gYear,10,1+((4-nov1.getDay()+7)%7)+21);h[toISO2(thx)]='Thanksgiving';var dec25=new Date(gYear,11,25);if(dec25.getDay()===6)dec25=new Date(dec25.getTime()-86400000);if(dec25.getDay()===0)dec25=new Date(dec25.getTime()+86400000);h[toISO2(dec25)]='Christmas Day';var ny=new Date(gYear,0,1);if(ny.getDay()===6)h[(gYear-1)+'-12-31']="New Year's Day (Observed)";if(ny.getDay()===0)h[gYear+'-01-02']="New Year's Day (Observed)";_bankHolCache[gYear]=h;return h;}
+function getSunsetTime(gY,gM,gD,loc){var lat=loc.lat,lng=loc.lng,tz=loc.tz;var doy=Math.floor((Date.UTC(gY,gM,gD)-Date.UTC(gY,0,0))/86400000);var B=2*Math.PI*(doy-81)/365;var EoT=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);var decl=-23.45*Math.cos(2*Math.PI*(doy+10)/365);var dR=decl*Math.PI/180,lR=lat*Math.PI/180;var cosH=(Math.sin(-0.833*Math.PI/180)-Math.sin(lR)*Math.sin(dR))/(Math.cos(lR)*Math.cos(dR));if(cosH>1||cosH<-1)return null;var H=Math.acos(cosH)*180/Math.PI;var solarNoon=12-(EoT/60)-(lng/15);var sunsetUTC=solarNoon+H/15;var isDST=false;if(tz>=-10&&tz<=-4){var ms=new Date(gY,2,8);while(ms.getDay()!==0)ms=new Date(ms.getTime()+86400000);var ne=new Date(gY,10,1);while(ne.getDay()!==0)ne=new Date(ne.getTime()+86400000);if(new Date(gY,gM,gD)>=ms&&new Date(gY,gM,gD)<ne)isDST=true;}var localOff=tz+(isDST?1:0);return sunsetUTC+localOff;}
+function fmtSunsetMin(totalMin){var h=Math.floor(totalMin/60),m=Math.round(totalMin%60);if(m===60){h++;m=0;}var ap=h>=12?'PM':'AM';var h12=h%12;if(h12===0)h12=12;return h12+':'+(m<10?'0':'')+m+' '+ap;}
+function getCandleTime(gY,gM,gD,loc){var s=getSunsetTime(gY,gM,gD,loc);if(!s)return'';return fmtSunsetMin((s*60)-18);}
+function getHavdalahTime(gY,gM,gD,loc){var s=getSunsetTime(gY,gM,gD,loc);if(!s)return'';return fmtSunsetMin((s*60)+42);}
+
+function getFastTimes(gY,gM,gD){
+    var h=gregToHeb(gY,gM,gD);
+    var isFast=false,isMajor=false;
+    if(h.month===7&&h.day===3)isFast=true;
+    if(h.month===7&&h.day===10){isFast=true;isMajor=true;}
+    if(h.month===10&&h.day===10)isFast=true;
+    if(h.month===4&&h.day===17)isFast=true;
+    if(h.month===5&&h.day===9){isFast=true;isMajor=true;}
+    if((h.month===12&&!isHebLeapYear(h.year)&&h.day===13)||(h.month===13&&h.day===13))isFast=true;
+    if(!isFast)return null;
+    var s=getSunsetTime(gY,gM,gD,_zmanLoc);
+    if(!s)return null;
+    function ft(m){var h2=Math.floor(m/60),mn=Math.round(m%60);if(mn===60){h2++;mn=0;}var ap=h2>=12?'PM':'AM';var h12=h2%12;if(h12===0)h12=12;return h12+':'+(mn<10?'0':'')+mn+' '+ap;}
+    return{end:ft((s*60)+(isMajor?50:40)),end60:ft((s*60)+60),isMajor};
+}
+// ── Office Closed State (manual + auto from holidays) ──
+var _manualClosed = {}; // { 'YYYY-MM-DD': 'reason' }  — persisted in SharePoint config
+function isOfficeClosed(iso){
+    const mc = _manualClosed[iso];
+    if(mc === '__open__') return null;  // explicitly overridden to open
+    if(mc) return mc;
+    const yr = parseInt(iso.slice(0,4));
+    const jewHols = Object.assign({}, getJewishHolidays(yr), getJewishHolidays(yr+1));
+    if(jewHols[iso] && OFFICE_CLOSED_HOLS.includes(jewHols[iso])) return jewHols[iso];
+    // Bank holidays are NOT auto-closed — shown as info only (🏦)
+    return null;
+}
+function getManualClosed(){return _manualClosed;}
+function setManualClosed(obj){_manualClosed=obj||{};}
+
+// Zmanim location (default NYC)
+var _zmanLoc = {name:'New York',lat:40.7128,lng:-74.006,tz:-5};
+function setZmanLoc(loc){_zmanLoc=loc;}
+
+// Build today's Hebrew info object — matches OpsPay logic exactly
+function getTodayHebInfo(){
+    const now = new Date();
+    const y=now.getFullYear(), m=now.getMonth(), d=now.getDate();
+    const h=gregToHeb(y,m,d);
+    const iso=toISO2(now);
+    const dow=now.getDay();
+    const hebDayNames=['יום ראשון','יום שני','יום שלישי','יום רביעי','יום חמישי','ערב שבת','שבת קודש'];
+    const jewHols=Object.assign({},getJewishHolidays(y-1),getJewishHolidays(y),getJewishHolidays(y+1));
+    const holiday=jewHols[iso]||null;
+    const bankHol=getUSBankHolidays(y)[iso]||null;
+    const closed=isOfficeClosed(iso);
+    const isFri=dow===5, isSat=dow===6;
+
+    // Candle lighting: Friday OR erev Yom Tov (non-Friday)
+    let candle='', candleLabel='';
+    if(isFri){
+        candle=getCandleTime(y,m,d,_zmanLoc);
+        const parshaTmp=getParshaForShabbat(y,m,d+1);
+        candleLabel=candle?(parshaTmp?'🕯 '+candle+' · פרשת '+parshaTmp:'🕯 '+candle):'';
+    } else if(!isSat){
+        // Erev Yom Tov
+        const tmrw=new Date(y,m,d+1);
+        const tmrwISO=toISO2(tmrw);
+        const tmrwHol=jewHols[tmrwISO];
+        if(tmrwHol&&OFFICE_CLOSED_HOLS.includes(tmrwHol)){
+            candle=getCandleTime(y,m,d,_zmanLoc);
+            candleLabel=candle?'🕯 '+candle+' (ער"ח '+tmrwHol+')':'';
+        }
+    }
+
+    // Havdalah: Saturday OR last day of Yom Tov (when tomorrow is NOT also Yom Tov/Shabbos)
+    let havdalah='';
+    if(isSat){
+        havdalah=getHavdalahTime(y,m,d,_zmanLoc);
+    } else if(holiday&&OFFICE_CLOSED_HOLS.includes(holiday)){
+        const tmrw2=new Date(y,m,d+1);
+        const tmrwISO2=toISO2(tmrw2);
+        const tmrwHol2=jewHols[tmrwISO2];
+        if(!tmrw2.getDay()!==6&&(!tmrwHol2||!OFFICE_CLOSED_HOLS.includes(tmrwHol2))){
+            havdalah=getHavdalahTime(y,m,d,_zmanLoc);
+        }
+    }
+
+    // Parsha: Friday=this coming Shabbos, Saturday=today
+    const parsha=(isFri||isSat)?getParshaForShabbat(y,m,isFri?d+1:d):'';
+
+    // Special Shabbos: Friday=for coming Shabbos, Saturday=today
+    const specialShab=(isFri||isSat)?getSpecialShabbos(y,m,isFri?d+1:d):[];
+
+    // Fast times
+    const fastInfo=getFastTimes(y,m,d);
+
+    return {iso,y,m,d,h,hebDayName:hebDayNames[dow],holiday,bankHol,closed,
+        candle,candleLabel,havdalah,parsha,specialShab,fastInfo,
+        hebStr:toHebNum(h.day)+' '+hebrewMonthName(h.month)+' '+toHebYear(h.year)};
+}
+
 // ════════════════════════════════════════════════════════════════════
 //  SLA ENGINE — US Eastern working hours Mon-Thu 9-5, Fri 9-1
 // ════════════════════════════════════════════════════════════════════
@@ -430,23 +703,28 @@ function setETHour(date, h, m=0){
     et.setHours(h,m,0,0);
     return new Date(et.getTime()+off);
 }
+function isClosedDate(date){
+    // Check if a date is office-closed (holiday or manual)
+    const iso=toISO2(date);
+    return !!isOfficeClosed(iso);
+}
 function nextWorkStart(date){
     let d=new Date(date);
     const et=toET(d); const day=et.getDay(); const h=et.getHours()+et.getMinutes()/60;
-    // If currently a work day but after end, or weekend, go to next Mon 9am
     const endH=workDayEndHour(day);
-    if(isWorkDay(day)&&h<9){ return setETHour(d,9); }
-    if(isWorkDay(day)&&h>=endH){
-        // go to next work day
+    if(isWorkDay(day)&&!isClosedDate(d)&&h<9){ return setETHour(d,9); }
+    if(isWorkDay(day)&&!isClosedDate(d)&&h>=endH){
         let next=new Date(d); next.setDate(next.getDate()+1);
         const nd=toET(next).getDay();
         if(nd===6)next.setDate(next.getDate()+2);
         else if(nd===0)next.setDate(next.getDate()+1);
-        return setETHour(next,9);
-    }
-    if(day===6){ d.setDate(d.getDate()+2); return setETHour(d,9); }
-    if(day===0){ d.setDate(d.getDate()+1); return setETHour(d,9); }
-    return d; // already in working hours
+        d=next;
+    } else if(day===6){ d.setDate(d.getDate()+2); }
+    else if(day===0){ d.setDate(d.getDate()+1); }
+    // Skip over closed days
+    let safety=0;
+    while(safety++<14 && isClosedDate(d)){ d.setDate(d.getDate()+1); const nd=toET(d).getDay(); if(nd===6)d.setDate(d.getDate()+2); if(nd===0)d.setDate(d.getDate()+1); }
+    return setETHour(d,9);
 }
 function addWorkingMinutes(startDate, minutes){
     let d=new Date(startDate); let remaining=minutes;
@@ -667,6 +945,9 @@ async function showApp(){
     document.getElementById('userName').textContent = name.split(' ')[0];
     document.getElementById('appVersion').textContent = 'v' + APP_VERSION;
     loadPageSizePreference();
+    loadManualClosed();
+    renderTodayBanner();
+    renderClosedDaysPanel();
     
     // Resolve SharePoint site ID
     await resolveSiteId();
@@ -1115,6 +1396,7 @@ function applyFilters(){
     const priorityF = document.getElementById('fPriority').value;
     const hasNotifF = document.getElementById('fHasNotif').checked;
     const slaF = document.getElementById('fSla').value;
+    const dayF = (typeof _calDayFilter !== 'undefined') ? _calDayFilter : null;
     const today = new Date(); today.setHours(0,0,0,0);
 
     filtered = requests.filter(r => {
@@ -1173,6 +1455,7 @@ function applyFilters(){
             if(slaF==='resolution'&&!s.resolution) return false;
             if(slaF==='breached'&&!((s.newReq&&s.newReq.breached)||(s.response&&s.response.breached)||(s.resolution&&s.resolution.breached))) return false;
         }
+        if(dayF){ const dt=(r.EmailReceivedAt||r.CreatedAt||'').slice(0,10); if(dt!==dayF) return false; }
         if(search){
             const polText = (r.policies||[]).map(p=>p.num+' '+p.carrier+' '+p.type).join(' ');
             const txt = [r.RefId,r.CustomerName,polText,r.RequestType,r.Notes,r.CustomerEmail,r.Title].join(' ').toLowerCase();
@@ -1206,6 +1489,7 @@ function clearFilters(){
     document.getElementById('fPriority').value='';
     document.getElementById('fHasNotif').checked=false;
     document.getElementById('fSla').value='';
+    if(typeof _calDayFilter!=='undefined') _calDayFilter=null;
     statFilter=null; page=1;
     updateStats(); applyFilters();
 }
@@ -2369,6 +2653,434 @@ async function saveInlinePolicies(reqId){
 // ════════════════════════════════════════════════════════════════════
 //  RENDER ALL
 // ════════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════════
+//  TODAY BANNER + CALENDAR
+// ════════════════════════════════════════════════════════════════════
+var _calYear, _calMonth, _calSelectedDay = null;
+
+function loadManualClosed(){
+    try{ const s=localStorage.getItem('ct_manualClosed'); if(s) setManualClosed(JSON.parse(s)); } catch(e){}
+}
+function saveManualClosedLocal(){
+    try{ localStorage.setItem('ct_manualClosed', JSON.stringify(getManualClosed())); } catch(e){}
+}
+
+function renderTodayBanner(){
+    const info = getTodayHebInfo();
+    const now = new Date();
+    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    document.getElementById('tbMain').textContent =
+        'Today  ' + dayNames[now.getDay()] + ', ' + monNames[now.getMonth()] + ' ' + now.getDate();
+    document.getElementById('tbHeb').textContent = info.hebDayName + ' · ' + info.hebStr;
+
+    // Build badge row
+    const container = document.getElementById('tbBadges');
+    const badges = [];
+
+    // Candle lighting (Friday or Erev Yom Tov)
+    if(info.candle){
+        const suffix = info.candleLabel&&info.candleLabel.includes('ע')
+            ? ' ' + info.candleLabel.slice(info.candleLabel.indexOf('('))
+            : '';
+        badges.push(`<span style="font-size:12px;font-weight:600;color:#d97706;background:#fefce8;padding:2px 9px;border-radius:5px">🕯 ${esc(info.candle)}${suffix}</span>`);
+    }
+
+    // Havdalah (Saturday or end of Yom Tov)
+    if(info.havdalah){
+        badges.push(`<span style="font-size:12px;font-weight:600;color:#6d28d9;background:#f5f3ff;padding:2px 9px;border-radius:5px">✨ ${esc(info.havdalah)}</span>`);
+    }
+
+    // Parsha (Friday=coming Shabbos, Saturday=today)
+    if(info.parsha){
+        badges.push(`<span style="font-size:12px;font-weight:600;color:#7c3aed;background:rgba(139,92,246,.1);padding:2px 9px;border-radius:5px;direction:rtl">📜 פרשת ${esc(info.parsha)}</span>`);
+    }
+
+    // Special Shabbos names (שבת שובה, שבת הגדול, etc.)
+    (info.specialShab||[]).forEach(ss=>{
+        badges.push(`<span style="font-size:12px;font-weight:600;color:#be185d;background:#fce7f3;padding:2px 9px;border-radius:5px;direction:rtl">${esc(ss)}</span>`);
+    });
+
+    // Fast day end time
+    if(info.fastInfo){
+        badges.push(`<span style="font-size:12px;font-weight:600;color:#dc2626;background:#fee2e2;padding:2px 9px;border-radius:5px">⏰ Fast ends ${esc(info.fastInfo.end60)}</span>`);
+    }
+
+    // Jewish holiday
+    if(info.holiday){
+        const isClosed=OFFICE_CLOSED_HOLS.includes(info.holiday);
+        badges.push(`<span style="font-size:12px;font-weight:600;color:${isClosed?'#92400e':'#d97706'};background:${isClosed?'#fef3c7':'#fefce8'};padding:2px 9px;border-radius:5px;direction:rtl">${esc(info.holiday)}</span>`);
+    }
+
+    // US bank holiday
+    if(info.bankHol){
+        badges.push(`<span style="font-size:12px;font-weight:600;color:#1e40af;background:#eff6ff;padding:2px 9px;border-radius:5px">🏦 ${esc(info.bankHol)}</span>`);
+    }
+
+    // Office closed
+    if(info.closed){
+        badges.push(`<span style="font-size:12px;font-weight:600;color:#dc2626;background:#fef2f2;padding:2px 9px;border-radius:5px">🚫 Closed: ${esc(info.closed)}</span>`);
+    }
+
+    container.innerHTML = badges.join('');
+}
+
+var _showMonthPicker = false;
+var _showZmanPicker = false;
+const MONTHS_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const ZMAN_CITIES = [
+    {name:'New York',lat:40.7128,lng:-74.006,tz:-5},{name:'Los Angeles',lat:34.0522,lng:-118.2437,tz:-8},
+    {name:'Chicago',lat:41.8781,lng:-87.6298,tz:-6},{name:'Miami',lat:25.7617,lng:-80.1918,tz:-5},
+    {name:'Lakewood',lat:40.0960,lng:-74.2218,tz:-5},{name:'Baltimore',lat:39.2904,lng:-76.6122,tz:-5},
+    {name:'Monticello',lat:41.6556,lng:-74.689,tz:-5},{name:'Montreal',lat:45.5017,lng:-73.5673,tz:-5},
+    {name:'Jerusalem',lat:31.7683,lng:35.2137,tz:2},{name:'London',lat:51.5074,lng:-0.1278,tz:0},
+    {name:'Toronto',lat:43.6532,lng:-79.3832,tz:-5},
+];
+
+function openCalendarModal(){
+    const now = new Date();
+    _calYear = now.getFullYear(); _calMonth = now.getMonth();
+    _calSelectedDay = null; _showMonthPicker=false; _showZmanPicker=false;
+    renderCalendar();
+    renderZmanGrid();
+    document.getElementById('calModal').style.display = 'flex';
+}
+function closeCalendarModal(){
+    document.getElementById('calModal').style.display='none';
+    _showMonthPicker=false; _showZmanPicker=false;
+}
+function calGoToday(){
+    const n=new Date(); _calYear=n.getFullYear(); _calMonth=n.getMonth();
+    _showMonthPicker=false; renderCalendar();
+}
+function calNav(dir){
+    _calMonth += dir;
+    if(_calMonth < 0){ _calMonth=11; _calYear--; }
+    if(_calMonth > 11){ _calMonth=0; _calYear++; }
+    _showMonthPicker=false;
+    renderCalendar();
+}
+function toggleMonthPicker(){
+    _showMonthPicker=!_showMonthPicker; _showZmanPicker=false;
+    document.getElementById('calMonthPicker').style.display=_showMonthPicker?'block':'none';
+    document.getElementById('calZmanPicker').style.display='none';
+    if(_showMonthPicker) renderMonthGrid();
+}
+function toggleZmanPicker(){
+    _showZmanPicker=!_showZmanPicker; _showMonthPicker=false;
+    document.getElementById('calZmanPicker').style.display=_showZmanPicker?'flex':'none';
+    document.getElementById('calMonthPicker').style.display='none';
+}
+function renderMonthGrid(){
+    document.getElementById('calPickerYear').textContent=_calYear;
+    const now=new Date();
+    document.getElementById('calMonthGrid').innerHTML=MONTHS_EN.map((m,i)=>{
+        const isCur=i===_calMonth;
+        const isNow=i===now.getMonth()&&_calYear===now.getFullYear();
+        return `<button onclick="_calMonth=${i};_showMonthPicker=false;document.getElementById('calMonthPicker').style.display='none';renderCalendar()" style="padding:8px 4px;font-size:12px;font-weight:${isCur?700:500};background:${isCur?'#3b82f6':isNow?'#eff6ff':'#fff'};color:${isCur?'#fff':'#374151'};border:1px solid ${isCur?'#3b82f6':isNow?'#93c5fd':'#e2e8f0'};border-radius:6px;cursor:pointer">${m}</button>`;
+    }).join('');
+}
+function renderZmanGrid(){
+    document.getElementById('calZmanGrid').innerHTML=ZMAN_CITIES.map(c=>{
+        const isSel=_zmanLoc.name===c.name;
+        return `<button onclick="setZmanLoc({name:'${c.name}',lat:${c.lat},lng:${c.lng},tz:${c.tz}});document.getElementById('calZmanName').textContent='${c.name}';_showZmanPicker=false;document.getElementById('calZmanPicker').style.display='none';renderCalendar();renderTodayBanner()" style="padding:3px 9px;font-size:11px;font-weight:${isSel?700:500};background:${isSel?'#3b82f6':'#fff'};color:${isSel?'#fff':'#374151'};border:1px solid ${isSel?'#3b82f6':'#e2e8f0'};border-radius:5px;cursor:pointer">${c.name}</button>`;
+    }).join('');
+}
+
+function renderCalendar(){
+    const y=_calYear, m=_calMonth;
+    document.getElementById('calMonthTitle').textContent = MONTHS_EN[m]+' '+y;
+    document.getElementById('calPickerYear').textContent = y;
+    // Hebrew month label: show 1st and last day to get Hebrew months spanning this Gregorian month
+    const hFirst=gregToHeb(y,m,1), hLast=gregToHeb(y,m,daysInMonth(y,m));
+    const hebLabel=hFirst.month===hLast.month
+        ? hebrewMonthName(hFirst.month)+' '+toHebYear(hFirst.year)
+        : hebrewMonthName(hFirst.month)+' / '+hebrewMonthName(hLast.month)+' '+toHebYear(hLast.year);
+    document.getElementById('calHebTitle').textContent = hebLabel;
+    document.getElementById('calZmanName').textContent = _zmanLoc.name;
+    const jewHols = Object.assign({}, getJewishHolidays(y), getJewishHolidays(y+1), getJewishHolidays(y-1));
+    const bankHols = getUSBankHolidays(y);
+    const todayISO = toISO2(new Date());
+    const first = new Date(y, m, 1).getDay(); // day of week of 1st
+    const dim = daysInMonth(y, m);
+    // Count requests per day
+    const dayCounts = {};
+    requests.forEach(r=>{
+        const dt = r.EmailReceivedAt || r.CreatedAt;
+        if(dt){ const iso=dt.slice(0,10); dayCounts[iso]=(dayCounts[iso]||0)+1; }
+    });
+    let html = '';
+    // Prev month padding
+    const prevDim = daysInMonth(y, m-1<0?11:m-1);
+    for(let i=0;i<first;i++){
+        const pd=prevDim-first+1+i;
+        html+=`<div class="cal-day other-month"><div class="cal-day-num" style="color:#d1d5db">${pd}</div></div>`;
+    }
+    for(let d=1;d<=dim;d++){
+        const iso=y+'-'+pad2(m+1)+'-'+pad2(d);
+        const hb=gregToHeb(y,m,d);
+        const jewHol=jewHols[iso]||null;
+        const bankHol2=bankHols[iso]||null;
+        const closed=isOfficeClosed(iso);
+        const dow=new Date(y,m,d).getDay();
+        const isWknd=dow===0||dow===6;
+        const isTod=iso===todayISO;
+        const isSel=iso===_calSelectedDay;
+        const isFri=dow===5, isSat=dow===6;
+
+        // Parsha
+        const parsha=(isFri||isSat)?getParshaForShabbat(y,m,isFri?d+1:d):'';
+
+        // Candle: Friday OR erev Yom Tov (non-Friday)
+        let candle='', candleSuffix='';
+        if(isFri){ candle=getCandleTime(y,m,d,_zmanLoc); }
+        else if(!isSat){
+            const tmrwISO=toISO2(new Date(y,m,d+1));
+            const tmrwHol=jewHols[tmrwISO];
+            if(tmrwHol&&OFFICE_CLOSED_HOLS.includes(tmrwHol)){
+                candle=getCandleTime(y,m,d,_zmanLoc);
+                candleSuffix=' (ע"ח)';
+            }
+        }
+
+        // Havdalah: Saturday OR last day of Yom Tov
+        let havdalah='';
+        if(isSat){ havdalah=getHavdalahTime(y,m,d,_zmanLoc); }
+        else if(jewHol&&OFFICE_CLOSED_HOLS.includes(jewHol)){
+            const tmrw2=new Date(y,m,d+1);
+            const tmrwHol2=jewHols[toISO2(tmrw2)];
+            if(tmrw2.getDay()!==6&&(!tmrwHol2||!OFFICE_CLOSED_HOLS.includes(tmrwHol2)))
+                havdalah=getHavdalahTime(y,m,d,_zmanLoc);
+        }
+
+        // Special Shabbos
+        const specShab=isSat?getSpecialShabbos(y,m,d):(isFri?getSpecialShabbos(y,m,d+1):[]);
+
+        // Fast
+        const fast=getFastTimes(y,m,d);
+
+        const cnt=dayCounts[iso]||0;
+        const classes=['cal-day'];
+        if(isTod)classes.push('today');
+        if(isSel)classes.push('selected');
+        if(closed)classes.push('closed');
+        else if(isWknd)classes.push('weekend');
+
+        html+=`<div class="${classes.join(' ')}" onclick="calDayClick('${iso}')">
+            ${closed?`<div class="cal-day-closed-dot" title="${esc(closed)}"></div>`:''}
+            <div class="cal-day-num">${d}</div>
+            ${closed&&!isWknd?`<div style="font-size:8px;font-weight:700;color:#dc2626;letter-spacing:.5px;margin-top:1px">CLOSED</div>`:''}
+
+            <div class="cal-day-heb">${toHebNum(hb.day)} ${hebrewMonthName(hb.month)}</div>
+            ${jewHol?`<div class="cal-day-hol">${esc(jewHol)}</div>`:''}
+            ${bankHol2&&!jewHol?`<div class="cal-day-hol" style="color:#1e40af">${esc(bankHol2)}</div>`:''}
+            ${specShab.length?`<div class="cal-day-hol" style="color:#be185d">${esc(specShab[0])}</div>`:''}
+            ${parsha?`<div style="font-size:9px;color:#7c3aed;direction:rtl;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">פ׳ ${esc(parsha)}</div>`:''}
+            ${candle?`<div class="cal-day-candle">🕯 ${candle}${candleSuffix}</div>`:''}
+            ${havdalah?`<div style="font-size:9px;color:#6d28d9;font-weight:600;margin-top:1px">✨ ${havdalah}</div>`:''}
+            ${fast?`<div style="font-size:9px;color:#dc2626;font-weight:600;margin-top:1px">⏰ ${fast.end60}</div>`:''}
+            ${cnt?`<div class="cal-day-cnt">${cnt} req</div>`:''}
+        </div>`;
+    }
+    // Fill remaining cells
+    const total=first+dim;
+    const remaining=(7-total%7)%7;
+    for(let i=1;i<=remaining;i++){
+        html+=`<div class="cal-day other-month"><div class="cal-day-num" style="color:#d1d5db">${i}</div></div>`;
+    }
+    document.getElementById('calGrid').innerHTML = html;
+}
+
+function calDayClick(iso){
+    _calSelectedDay = _calSelectedDay===iso ? null : iso;
+    renderCalendar();
+    if(_calSelectedDay) renderSelDayPanel(_calSelectedDay);
+    else document.getElementById('calSelDayPanel').style.display='none';
+}
+function calDayFilter(){
+    if(!_calSelectedDay) return;
+    _calDayFilter = _calSelectedDay;
+    applyFilters();
+    closeCalendarModal();
+}
+function renderSelDayPanel(iso){
+    const panel=document.getElementById('calSelDayPanel');
+    const d=new Date(iso+'T12:00:00');
+    const y=d.getFullYear(),m=d.getMonth(),dd=d.getDate(),dow=d.getDay();
+    const dayNames=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const monNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const h=gregToHeb(y,m,dd);
+    const jewHols=Object.assign({},getJewishHolidays(y-1),getJewishHolidays(y),getJewishHolidays(y+1));
+    const jewHol=jewHols[iso]||null;
+    const mc=getManualClosed();
+    const isClosed=!!mc[iso];
+    const isWeekend=dow===0||dow===6;
+    const isFri=dow===5,isSat=dow===6;
+
+    // Title
+    document.getElementById('calSelDayTitle').textContent =
+        dayNames[dow]+', '+monNames[m]+' '+dd+' · '+toHebNum(h.day)+' '+hebrewMonthName(h.month)+' '+toHebYear(h.year);
+
+    // Badges
+    const badges=[];
+    if(jewHol) badges.push(`<span style="font-size:11px;font-weight:600;color:#92400e;background:#fefce8;padding:1px 7px;border-radius:4px;direction:rtl">${esc(jewHol)}</span>`);
+    if(isFri||isSat){
+        const parsha=getParshaForShabbat(y,m,isFri?dd+1:dd);
+        if(parsha) badges.push(`<span style="font-size:11px;font-weight:600;color:#7c3aed;background:#f3e8ff;padding:1px 7px;border-radius:4px;direction:rtl">📜 ${esc(parsha)}</span>`);
+        const specShab=getSpecialShabbos(y,m,isFri?dd+1:dd);
+        specShab.forEach(ss=>badges.push(`<span style="font-size:11px;font-weight:600;color:#be185d;background:#fce7f3;padding:1px 7px;border-radius:4px;direction:rtl">${esc(ss)}</span>`));
+    }
+    if(isFri){
+        const cl=getCandleTime(y,m,dd,_zmanLoc);
+        if(cl) badges.push(`<span style="font-size:11px;color:#d97706;background:#fefce8;padding:1px 7px;border-radius:4px">🕯 ${cl}</span>`);
+    } else if(!isSat){
+        const tmrwHol=jewHols[toISO2(new Date(y,m,dd+1))];
+        if(tmrwHol&&OFFICE_CLOSED_HOLS.includes(tmrwHol)){
+            const cl2=getCandleTime(y,m,dd,_zmanLoc);
+            if(cl2) badges.push(`<span style="font-size:11px;color:#d97706;background:#fefce8;padding:1px 7px;border-radius:4px">🕯 ${cl2} (ע"ח ${esc(tmrwHol)})</span>`);
+        }
+    }
+    if(isSat){
+        const hav=getHavdalahTime(y,m,dd,_zmanLoc);
+        if(hav) badges.push(`<span style="font-size:11px;color:#6b21a8;background:#f3e8ff;padding:1px 7px;border-radius:4px">✨ ${hav}</span>`);
+    } else if(jewHol&&OFFICE_CLOSED_HOLS.includes(jewHol)){
+        const tmrwHol2=jewHols[toISO2(new Date(y,m,dd+1))];
+        const tmrwIsSat=new Date(y,m,dd+1).getDay()===6;
+        if(!tmrwIsSat&&(!tmrwHol2||!OFFICE_CLOSED_HOLS.includes(tmrwHol2))){
+            const hav2=getHavdalahTime(y,m,dd,_zmanLoc);
+            if(hav2) badges.push(`<span style="font-size:11px;color:#6b21a8;background:#f3e8ff;padding:1px 7px;border-radius:4px">✨ ${hav2}</span>`);
+        }
+    }
+    const fast=getFastTimes(y,m,dd);
+    if(fast) badges.push(`<span style="font-size:11px;color:#dc2626;background:#fee2e2;padding:1px 7px;border-radius:4px">⏰ Fast ends ${fast.end60}</span>`);
+    document.getElementById('calSelDayBadges').innerHTML=badges.join('');
+
+    // Mark closed button (only for weekdays)
+    const btn=document.getElementById('calMarkClosedBtn');
+    if(isWeekend){ btn.style.display='none'; }
+    else {
+        btn.style.display='';
+        btn.textContent=isClosed?'🔓 Reopen Office':'🚫 Mark Closed';
+        btn.style.background=isClosed?'#fef2f2':'#f0fdf4';
+        btn.style.borderColor=isClosed?'#fca5a5':'#bbf7d0';
+        btn.style.color=isClosed?'#dc2626':'#16a34a';
+    }
+    panel.style.display='block';
+}
+function toggleSelDayClosed(){
+    if(!_calSelectedDay) return;
+    const mc=getManualClosed();
+    if(mc[_calSelectedDay]){ delete mc[_calSelectedDay]; }
+    else{ mc[_calSelectedDay]='Office Closed'; }
+    setManualClosed(mc); saveManualClosedLocal();
+    renderCalendar();
+    renderSelDayPanel(_calSelectedDay);
+    renderTodayBanner();
+    renderClosedDaysPanel();
+    toast((mc[_calSelectedDay]?'Marked Closed':'Reopened')+': '+_calSelectedDay,'ok');
+}
+var _calDayFilter = null;
+
+// ── Closed Days Panel (in today banner area) ──
+var _closedDaysPanelOpen = false;
+function toggleClosedDaysPanel(e){
+    if(e) e.stopPropagation();
+    _closedDaysPanelOpen = !_closedDaysPanelOpen;
+    document.getElementById('closedDaysPanel').style.display = _closedDaysPanelOpen ? 'block' : 'none';
+    if(_closedDaysPanelOpen) renderClosedDaysPanel();
+}
+function renderClosedDaysPanel(){
+    const mc = getManualClosed();
+    const now = new Date();
+    const yr = now.getFullYear();
+    // Collect all auto-closed (Jewish holidays) for this year and next
+    const jewHols = Object.assign({}, getJewishHolidays(yr-1), getJewishHolidays(yr), getJewishHolidays(yr+1));
+    // Build combined list: auto (Jewish yom tov) + manual, sorted by date
+    const entries = [];
+    // Auto-closed Jewish holidays
+    Object.keys(jewHols).sort().forEach(iso=>{
+        if(OFFICE_CLOSED_HOLS.includes(jewHols[iso])){
+            entries.push({iso, label: jewHols[iso], type:'auto'});
+        }
+    });
+    // Manual closed (may overlap — show separately)
+    Object.keys(mc).sort().forEach(iso=>{
+        if(!entries.find(e=>e.iso===iso && e.type==='auto')){
+            entries.push({iso, label: mc[iso]||'Office Closed', type:'manual'});
+        }
+    });
+    entries.sort((a,b)=>a.iso<b.iso?-1:1);
+
+    // Update button count
+    const totalCount = entries.length;
+    document.getElementById('tbClosedCount').textContent = totalCount;
+
+    if(!entries.length){
+        document.getElementById('closedDaysList').innerHTML =
+            '<span style="font-size:13px;color:#94a3b8">No closed days found.</span>';
+        return;
+    }
+    const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const monNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    document.getElementById('closedDaysList').innerHTML = entries.map(entry=>{
+        const d = new Date(entry.iso+'T12:00:00');
+        const h = gregToHeb(d.getFullYear(), d.getMonth(), d.getDate());
+        const dow = d.getDay();
+        const dateStr = dayNames[dow]+', '+monNames[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+        const hebStr = toHebNum(h.day)+' '+hebrewMonthName(h.month)+' '+toHebYear(h.year);
+        const isAuto = entry.type==='auto';
+        const isManual = !!mc[entry.iso];
+        const canRemove = isManual || !isAuto;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:${isAuto?'#fefce8':'#fef2f2'};border:1px solid ${isAuto?'#fde68a':'#fca5a5'};border-radius:8px;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap">
+                <span style="font-size:12px;font-weight:700;color:#374151;white-space:nowrap">${dateStr}</span>
+                <span style="font-size:11px;color:#9ca3af;direction:rtl">${hebStr}</span>
+                <span style="font-size:12px;font-weight:600;color:${isAuto?'#92400e':'#dc2626'};direction:rtl">${isAuto?'':'🔒 '}${esc(entry.label)}</span>
+                ${isAuto&&isManual?'<span style="font-size:10px;color:#dc2626;background:#fee2e2;padding:1px 6px;border-radius:4px;font-weight:600">+Manual</span>':''}
+            </div>
+            <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+                ${isManual?`<button onclick="cdRemoveDay('${entry.iso}')" style="padding:3px 9px;background:#fef2f2;border:1px solid #fca5a5;border-radius:5px;color:#dc2626;font-size:11px;font-weight:600;cursor:pointer">Remove</button>`:''}
+                ${isAuto&&!isManual?`<button onclick="cdRemoveAuto('${entry.iso}')" style="padding:3px 9px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;color:#1e40af;font-size:11px;font-weight:600;cursor:pointer" title="This is an automatic Jewish holiday close — override to reopen">Override Open</button>`:''}
+            </div>
+        </div>`;
+    }).join('');
+}
+function cdAddDay(){
+    const date=document.getElementById('cdAddDate').value;
+    const reason=document.getElementById('cdAddReason').value.trim()||'Office Closed';
+    if(!date){ toast('Pick a date','err'); return; }
+    const mc=getManualClosed(); mc[date]=reason; setManualClosed(mc);
+    saveManualClosedLocal();
+    document.getElementById('cdAddDate').value='';
+    document.getElementById('cdAddReason').value='';
+    renderCalendar(); renderTodayBanner(); renderClosedDaysPanel();
+    toast('Closed day added: '+date,'ok');
+}
+function cdRemoveDay(iso){
+    const mc=getManualClosed(); delete mc[iso]; setManualClosed(mc);
+    saveManualClosedLocal();
+    renderCalendar(); renderTodayBanner(); renderClosedDaysPanel();
+    if(_calSelectedDay===iso) renderSelDayPanel(iso);
+    toast('Removed: '+iso,'ok');
+}
+function cdRemoveAuto(iso){
+    // "Override Open" — store a special marker so isOfficeClosed skips this holiday
+    const mc=getManualClosed(); mc[iso]='__open__'; setManualClosed(mc);
+    saveManualClosedLocal();
+    renderCalendar(); renderTodayBanner(); renderClosedDaysPanel();
+    toast('Override: '+iso+' marked open','ok');
+}
+
+function renderManualClosedList(){ renderClosedDaysPanel(); }
+function addManualClosed(){
+    const date=document.getElementById('calClosedDate')?.value;
+    if(!date) return;
+    cdAddDay();
+}
+function removeManualClosed(iso){ cdRemoveDay(iso); }
+
+
 function renderAll(){
     updateStats();
     renderTabs();
