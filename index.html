@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 9;
+    var FORCE_REFRESH_VERSION = 8;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -299,11 +299,34 @@
             <div class="sla-divider"></div>
             <div class="sla-item"><div class="sla-icon" style="background:#dcfce7;color:#16a34a">✅</div><div><div class="sla-label">Completed Today</div><div class="sla-val" id="slaToday" style="color:#16a34a">0</div></div></div>
             <div class="sla-divider"></div>
-            <div class="sla-item"><div class="sla-icon" style="background:#fef3c7;color:#d97706">📊</div><div><div class="sla-label">This Week</div><div class="sla-val" id="slaWeek" style="color:#d97706">0</div></div></div>
+            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='newReq';applyFilters()">
+                <div class="sla-icon" style="background:#fef3c7;color:#d97706">📋</div>
+                <div><div class="sla-label">New Req SLA</div>
+                <div style="display:flex;gap:8px;align-items:baseline">
+                    <div class="sla-val" id="slaNrOk" style="color:#16a34a">0</div><div style="font-size:11px;color:#16a34a">ok</div>
+                    <div class="sla-val" id="slaNrBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
+                </div></div>
+            </div>
             <div class="sla-divider"></div>
-            <div class="sla-item"><div class="sla-icon" style="background:#fef2f2;color:#dc2626">🚨</div><div><div class="sla-label">SLA Breached</div><div class="sla-val" id="slaBreach" style="color:#dc2626">0</div></div></div>
+            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='response';applyFilters()">
+                <div class="sla-icon" style="background:#fff7ed;color:#ea580c">💬</div>
+                <div><div class="sla-label">Response SLA</div>
+                <div style="display:flex;gap:8px;align-items:baseline">
+                    <div class="sla-val" id="slaRespOk" style="color:#16a34a">0</div><div style="font-size:11px;color:#16a34a">ok</div>
+                    <div class="sla-val" id="slaRespBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
+                </div></div>
+            </div>
             <div class="sla-divider"></div>
-            <div class="sla-item"><div class="sla-icon" style="background:#f5f3ff;color:#7c3aed">📈</div><div><div class="sla-label">SLA Target</div><div class="sla-val" style="color:#7c3aed">8h</div></div></div>
+            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='breached';applyFilters()">
+                <div class="sla-icon" style="background:#fef2f2;color:#dc2626">🚨</div>
+                <div><div class="sla-label">Resolution SLA</div>
+                <div style="display:flex;gap:8px;align-items:baseline">
+                    <div class="sla-val" id="slaResOk" style="color:#16a34a">0</div><div style="font-size:11px;color:#16a34a">ok</div>
+                    <div class="sla-val" id="slaResBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
+                </div></div>
+            </div>
+            <div class="sla-divider"></div>
+            <div class="sla-item"><div class="sla-icon" style="background:#f5f3ff;color:#7c3aed">🎯</div><div><div class="sla-label">Working Hours</div><div class="sla-val" style="color:#7c3aed;font-size:12px">M-Th 9-5 / F 9-1</div></div></div>
         </div>
 
         <!-- Stat Cards -->
@@ -318,6 +341,13 @@
                 <select id="fType" onchange="applyFilters()"><option value="">All Types</option></select>
                 <select id="fPriority" onchange="applyFilters()"><option value="">All Priorities</option><option value="urgent">🔴 Urgent</option><option value="high">🟠 High</option><option value="normal">🟢 Normal</option></select>
                 <label><input type="checkbox" id="fHasNotif" onchange="applyFilters()"> Has Responses</label>
+                <select id="fSla" onchange="applyFilters()" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;min-width:140px;cursor:pointer;background:#fff;color:#334155;font-family:inherit">
+                    <option value="">All SLAs</option>
+                    <option value="newReq">⏱️ New Request SLA</option>
+                    <option value="response">🔴 Response SLA</option>
+                    <option value="resolution">📊 Resolution SLA</option>
+                    <option value="breached">🚨 Any Breached</option>
+                </select>
                 <button class="clear-btn" id="clearBtn" onclick="clearFilters()">✕ Clear</button>
             </div>
             <div class="active-filters" id="activeFilters"></div>
@@ -346,7 +376,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 9;
+const APP_VERSION = 8;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -370,11 +400,96 @@ const CONFIG = {
 // ════════════════════════════════════════════════════════════════════
 //  CONSTANTS
 // ════════════════════════════════════════════════════════════════════
-const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Completed','Not Related'];
-const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#9333ea','Processing':'#0891b2','Completed':'#16a34a','Delivered':'#059669','Not Related':'#94a3b8'};
+const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied','Completed','Not Related'];
+const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#9333ea','Processing':'#0891b2','Customer Replied':'#0284c7','Carrier Replied':'#ea580c','Completed':'#16a34a','Delivered':'#059669','Not Related':'#94a3b8'};
 const EXIT_STATUSES = ['Delivered','Not Related'];
-const ACTIVE_STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing'];
+const ACTIVE_STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied'];
 const DONE_STATUSES = ['Completed','Delivered'];
+const REPLIED_STATUSES = ['Customer Replied','Carrier Replied'];
+
+// ════════════════════════════════════════════════════════════════════
+//  SLA ENGINE — US Eastern working hours Mon-Thu 9-5, Fri 9-1
+// ════════════════════════════════════════════════════════════════════
+const SLA_TZ = 'America/New_York';
+function toET(date){ return new Date(date.toLocaleString('en-US',{timeZone:SLA_TZ})); }
+function isWorkDay(day){ return day>=1&&day<=5; } // Mon-Fri
+function workDayEndHour(day){ return day===5?13:17; } // Fri=1pm, else 5pm
+function isWorkingTime(date){
+    const et=toET(date); const day=et.getDay(); const h=et.getHours()+et.getMinutes()/60;
+    if(!isWorkDay(day))return false;
+    return h>=9&&h<workDayEndHour(day);
+}
+function getUTCOffset(date){
+    // Returns UTC offset in ms for ET at given date
+    const local=new Date(date.toLocaleString('en-US',{timeZone:SLA_TZ}));
+    return date.getTime()-local.getTime();
+}
+function setETHour(date, h, m=0){
+    const off=getUTCOffset(date);
+    const et=new Date(date.getTime()-off);
+    et.setHours(h,m,0,0);
+    return new Date(et.getTime()+off);
+}
+function nextWorkStart(date){
+    let d=new Date(date);
+    const et=toET(d); const day=et.getDay(); const h=et.getHours()+et.getMinutes()/60;
+    // If currently a work day but after end, or weekend, go to next Mon 9am
+    const endH=workDayEndHour(day);
+    if(isWorkDay(day)&&h<9){ return setETHour(d,9); }
+    if(isWorkDay(day)&&h>=endH){
+        // go to next work day
+        let next=new Date(d); next.setDate(next.getDate()+1);
+        const nd=toET(next).getDay();
+        if(nd===6)next.setDate(next.getDate()+2);
+        else if(nd===0)next.setDate(next.getDate()+1);
+        return setETHour(next,9);
+    }
+    if(day===6){ d.setDate(d.getDate()+2); return setETHour(d,9); }
+    if(day===0){ d.setDate(d.getDate()+1); return setETHour(d,9); }
+    return d; // already in working hours
+}
+function addWorkingMinutes(startDate, minutes){
+    let d=new Date(startDate); let remaining=minutes;
+    if(!isWorkingTime(d)) d=nextWorkStart(d);
+    while(remaining>0){
+        const et=toET(d); const day=et.getDay();
+        const endH=workDayEndHour(day);
+        const curH=et.getHours()+et.getMinutes()/60+et.getSeconds()/3600;
+        const minsLeft=(endH-curH)*60;
+        if(remaining<=minsLeft){ d=new Date(d.getTime()+remaining*60000); remaining=0; }
+        else{ remaining-=minsLeft; let next=new Date(d); next.setDate(next.getDate()+1); const nd=toET(next).getDay(); if(nd===6)next.setDate(next.getDate()+2); else if(nd===0)next.setDate(next.getDate()+1); d=setETHour(next,9); }
+    }
+    return d;
+}
+function getSlaInfo(r){
+    const now=new Date();
+    const open=r.EmailReceivedAt?new Date(r.EmailReceivedAt):null;
+    const isActive=!r.Archived&&!EXIT_STATUSES.includes(r.Status)&&r.Status!=='Completed';
+    const res={newReq:null,response:null,resolution:null};
+    // SLA 1: New Request — 1 working hour while status is New Request
+    if(open&&r.Status==='New Request'){
+        const dl=addWorkingMinutes(open,60); const breached=now>dl;
+        const minsLeft=breached?0:Math.round((dl-now)/60000);
+        res.newReq={deadline:dl,breached,label:breached?'BREACHED':'~'+minsLeft+'m left'};
+    }
+    // SLA 2: Response — 1 working hour from Customer/Carrier Replied
+    if(REPLIED_STATUSES.includes(r.Status)&&r.LastActivityAt){
+        const rt=new Date(r.LastActivityAt); const dl=addWorkingMinutes(rt,60); const breached=now>dl;
+        const minsLeft=breached?0:Math.round((dl-now)/60000);
+        res.response={deadline:dl,breached,label:breached?'BREACHED':'~'+minsLeft+'m left'};
+    }
+    // SLA 3: Resolution — 24 working hours from open, or Deadline field
+    if(open&&isActive){
+        let dl;
+        if(r.Deadline){ dl=new Date(r.Deadline); dl.setHours(17,0,0,0); }
+        else{ dl=addWorkingMinutes(open,24*60); }
+        const breached=now>dl;
+        const mins=Math.abs((dl-now)/60000);
+        const h=Math.floor(mins/60); const m=Math.round(mins%60);
+        res.resolution={deadline:dl,breached,label:breached?'BREACHED':(h>0?h+'h ':'')+m+'m left'};
+    }
+    return res;
+}
 const REQUEST_TYPES = ['Certificate of Insurance','Additional Insured','Waiver of Subrogation','Endorsement Request','Auto ID Card','Binder'];
 const TYPE_STYLES = {'Certificate of Insurance':{cls:'cert',icon:'📜'},'Additional Insured':{cls:'addl-insured',icon:'👥'},'Waiver of Subrogation':{cls:'waiver',icon:'📋'},'Endorsement Request':{cls:'endorsement',icon:'📝'},'Auto ID Card':{cls:'cert',icon:'🚗'},'Binder':{cls:'cert',icon:'📎'}};
 const ACOLORS = ['#dc2626','#ea580c','#d97706','#16a34a','#0891b2','#2563eb','#7c3aed','#c026d3','#059669','#0d9488','#6366f1','#8b5cf6','#ec4899','#f43f5e','#84cc16','#06b6d4'];
@@ -682,6 +797,7 @@ async function ensureColumnsExist(){
         { name: 'FrontConvToEmails',     text: {} },
         { name: 'EmailReceivedAt',       text: {} },
         { name: 'LastActivityAt',        text: {} },
+        { name: 'SlaResponseAt',         text: {} },
     ];
     try {
         const existing = await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`);
@@ -765,6 +881,7 @@ async function loadRequests(silent=false){
                     Archived:            f.Archived || false,
                     EmailReceivedAt:     f.EmailReceivedAt || '',
                     LastActivityAt:      f.LastActivityAt || '',
+                    SlaResponseAt:       f.SlaResponseAt || '',
                 });
             });
             url = r['@odata.nextLink'] ? r['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
@@ -920,6 +1037,35 @@ function updateStats(){
     const total = counts.custResp + counts.carrResp;
     const badge = document.getElementById('notifBadge');
     badge.textContent = total; badge.style.display = total>0?'flex':'none';
+
+    // ── SLA Banner ──
+    // Avg turnaround (completed items with both EmailReceivedAt and ModifiedAt)
+    const completedToday = requests.filter(r=>r.Status==='Completed'&&!r.Archived&&new Date(r.ModifiedAt)>=today);
+    const completedWeek = requests.filter(r=>{
+        if(r.Status!=='Completed'||r.Archived) return false;
+        const d=new Date(r.ModifiedAt); const wStart=new Date(today); wStart.setDate(today.getDate()-today.getDay());
+        return d>=wStart;
+    });
+    const turnarounds = requests.filter(r=>r.Status==='Completed'&&r.EmailReceivedAt&&r.ModifiedAt)
+        .map(r=>(new Date(r.ModifiedAt)-new Date(r.EmailReceivedAt))/3600000).filter(h=>h>0&&h<720);
+    const avgH = turnarounds.length ? Math.round(turnarounds.reduce((a,b)=>a+b,0)/turnarounds.length) : null;
+    document.getElementById('slaAvg').textContent = avgH ? (avgH<24?avgH+'h':Math.round(avgH/24)+'d') : '—';
+    document.getElementById('slaToday').textContent = completedToday.length;
+
+    // New Request SLA counts
+    let nrOk=0, nrBreach=0, respOk=0, respBreach=0, resOk=0, resBreach=0;
+    requests.forEach(r=>{
+        const s=getSlaInfo(r);
+        if(s.newReq){ s.newReq.breached?nrBreach++:nrOk++; }
+        if(s.response){ s.response.breached?respBreach++:respOk++; }
+        if(s.resolution){ s.resolution.breached?resBreach++:resOk++; }
+    });
+    document.getElementById('slaNrOk').textContent=nrOk;
+    document.getElementById('slaNrBreach').textContent=nrBreach;
+    document.getElementById('slaRespOk').textContent=respOk;
+    document.getElementById('slaRespBreach').textContent=respBreach;
+    document.getElementById('slaResOk').textContent=resOk;
+    document.getElementById('slaResBreach').textContent=resBreach;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -968,6 +1114,7 @@ function applyFilters(){
     const typeF = document.getElementById('fType').value;
     const priorityF = document.getElementById('fPriority').value;
     const hasNotifF = document.getElementById('fHasNotif').checked;
+    const slaF = document.getElementById('fSla').value;
     const today = new Date(); today.setHours(0,0,0,0);
 
     filtered = requests.filter(r => {
@@ -986,6 +1133,7 @@ function applyFilters(){
             if(r.Status==='Completed') return false;
             // Hide pending items UNLESS they have a response (came back)
             if(isPending && !pendingHasResponse) return false;
+            // Customer/Carrier Replied always visible
         }
         if(tab==='myPending'){
             if(!isPending) return false;
@@ -1018,6 +1166,13 @@ function applyFilters(){
         if(typeF && r.RequestType!==typeF) return false;
         if(priorityF && r.Priority!==priorityF) return false;
         if(hasNotifF && !r.HasCustomerResponse && !r.HasCarrierResponse) return false;
+        if(slaF){
+            const s=getSlaInfo(r);
+            if(slaF==='newReq'&&!s.newReq) return false;
+            if(slaF==='response'&&!s.response) return false;
+            if(slaF==='resolution'&&!s.resolution) return false;
+            if(slaF==='breached'&&!((s.newReq&&s.newReq.breached)||(s.response&&s.response.breached)||(s.resolution&&s.resolution.breached))) return false;
+        }
         if(search){
             const polText = (r.policies||[]).map(p=>p.num+' '+p.carrier+' '+p.type).join(' ');
             const txt = [r.RefId,r.CustomerName,polText,r.RequestType,r.Notes,r.CustomerEmail,r.Title].join(' ').toLowerCase();
@@ -1029,28 +1184,15 @@ function applyFilters(){
     // Sort: by most recent activity (reply time if has reply, else open time) — newest first
     // No grouping — one unified sort so newest email/reply always wins
     function validTs(raw){ if(!raw) return 0; const d=new Date(raw); return isNaN(d)?0:d.getTime(); }
-    function replyTs(r){
-        // Real reply time: LastActivityAt if distinct from open, else ModifiedAt if has response flag
+    function sortKey(r){
         const openTs = validTs(r.EmailReceivedAt) || validTs(r.CreatedAt);
+        // If LastActivityAt is distinct from EmailReceivedAt, a real reply was recorded — use it
         const actTs = validTs(r.LastActivityAt);
-        if(actTs && actTs !== openTs) return actTs;
-        if((r.HasCustomerResponse||r.HasCarrierResponse) && r.ModifiedAt){
-            const modTs = validTs(r.ModifiedAt);
-            if(modTs && modTs !== openTs) return modTs;
-        }
-        return 0; // no reply
+        if(actTs && actTs !== validTs(r.EmailReceivedAt)) return actTs;
+        return openTs;
     }
 
-    filtered.sort((a,b) => {
-        const aReply = replyTs(a), bReply = replyTs(b);
-        const aHas = aReply > 0, bHas = bReply > 0;
-        // Items with replies always above items without
-        if(aHas !== bHas) return aHas ? -1 : 1;
-        // Both have replies: sort by reply time newest first
-        if(aHas && bHas) return bReply - aReply;
-        // Neither has reply: sort by open date newest first
-        return (validTs(b.EmailReceivedAt)||validTs(b.CreatedAt)) - (validTs(a.EmailReceivedAt)||validTs(a.CreatedAt));
-    });
+    filtered.sort((a,b) => sortKey(b) - sortKey(a));
 
     renderTable();
     updateFilterUI();
@@ -1063,6 +1205,7 @@ function clearFilters(){
     document.getElementById('fType').value='';
     document.getElementById('fPriority').value='';
     document.getElementById('fHasNotif').checked=false;
+    document.getElementById('fSla').value='';
     statFilter=null; page=1;
     updateStats(); applyFilters();
 }
@@ -1125,12 +1268,16 @@ function renderTable(){
         const subject = convSubjects[0] || '';
         const frontConvId = r.FrontConvIds?.split('|')[0] || '';
 
+        const sla = getSlaInfo(r);
+        const anySlaBreach = (sla.newReq&&sla.newReq.breached)||(sla.response&&sla.response.breached)||(sla.resolution&&sla.resolution.breached);
         let notifHtml='';
-        if(r.HasCustomerResponse||r.HasCarrierResponse||r.SlaBreached){
+        if(r.HasCustomerResponse||r.HasCarrierResponse||r.SlaBreached||anySlaBreach||sla.newReq||sla.response){
             notifHtml='<div class="notif-dots">';
             if(r.HasCustomerResponse) notifHtml+='<span class="notif-dot customer">💬 Customer</span>';
             if(r.HasCarrierResponse) notifHtml+='<span class="notif-dot carrier">🏢 Carrier</span>';
-            if(r.SlaBreached) notifHtml+='<span class="notif-dot sla">⚠️ SLA</span>';
+            if(sla.newReq) notifHtml+='<span class="notif-dot sla" title="New Request SLA">'+(sla.newReq.breached?'🚨 NR: BREACHED':'⏱️ NR: '+sla.newReq.label)+'</span>';
+            if(sla.response) notifHtml+='<span class="notif-dot sla" title="Response SLA">'+(sla.response.breached?'🔴 Resp: BREACHED':'⏳ Resp: '+sla.response.label)+'</span>';
+            if(r.SlaBreached&&!sla.newReq&&!sla.response) notifHtml+='<span class="notif-dot sla">⚠️ SLA</span>';
             notifHtml+='</div>';
         }
 
@@ -1174,6 +1321,7 @@ function renderTable(){
                   <div class="age-pill ${age.cls}">${age.text}</div>
                   <div style="font-size:10px;color:#94a3b8;margin-top:2px">${openDate?fmtDateTime(openDate):'—'}</div>
                 `}
+                ${sla.resolution?`<div style="margin-top:4px;display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:600;background:${sla.resolution.breached?'#fef2f2':'#f0fdf4'};color:${sla.resolution.breached?'#dc2626':'#16a34a'}">⏱ ${sla.resolution.label}</div>`:''}
             </td>
             <td style="text-align:center"><div style="display:flex;gap:6px;justify-content:center">
                 <button class="front-btn" onclick="openFront('${esc(frontConvId)}')" title="Open in Front">✉️</button>
@@ -1213,7 +1361,10 @@ function openStatusDD(id, el){
 async function setStatus(id, status){
     document.querySelectorAll('.status-dd').forEach(d=>d.remove());
     try {
-        const fields = { Status: status, ReopenedFrom: '', LastActivityAt: new Date().toISOString() };
+        const r = requests.find(x=>x.id===id);
+        // Keep ReopenedFrom unless resolving (Completed, Not Related) or going back to Pending
+        const clearReopened = status==='Completed'||status==='Not Related'||status.startsWith('Pending');
+        const fields = { Status: status, ReopenedFrom: clearReopened ? '' : (r?.ReopenedFrom||''), LastActivityAt: new Date().toISOString() };
         // Auto-archive 'Not Related' only
         if(status === 'Not Related'){
             fields.Archived = true;
@@ -1223,14 +1374,19 @@ async function setStatus(id, status){
             fields.HasCustomerResponse = false;
             fields.HasCarrierResponse = false;
         }
+        // When manually setting Customer/Carrier Replied, record timestamp for SLA
+        if(REPLIED_STATUSES.includes(status)){
+            fields.SlaResponseAt = new Date().toISOString();
+            fields.HasCustomerResponse = status === 'Customer Replied' ? true : (r ? r.HasCustomerResponse : false);
+            fields.HasCarrierResponse  = status === 'Carrier Replied'  ? true : (r ? r.HasCarrierResponse  : false);
+        }
         // Un-archive if moving away from Not Related
-        const r = requests.find(x=>x.id===id);
         if(r && r.Archived && status !== 'Not Related'){
             fields.Archived = false;
         }
         await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${id}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
         if(r){ 
-            r.Status=status; r.ReopenedFrom=''; r.LastActivityAt=fields.LastActivityAt;
+            r.Status=status; r.ReopenedFrom=fields.ReopenedFrom; r.LastActivityAt=fields.LastActivityAt;
             if(fields.Archived!==undefined) r.Archived=fields.Archived;
             if(fields.HasCustomerResponse!==undefined) r.HasCustomerResponse=fields.HasCustomerResponse;
             if(fields.HasCarrierResponse!==undefined) r.HasCarrierResponse=fields.HasCarrierResponse;
