@@ -2208,9 +2208,12 @@ function openInlineCustomerSearch(reqId, tdEl){
     const rect = tdEl.getBoundingClientRect();
     const popup = document.createElement('div');
     popup.className = 'inline-popup';
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const showAbove = spaceBelow < 300;
-    popup.style.cssText = `position:fixed;${showAbove?'bottom:'+(window.innerHeight-rect.top+4)+'px':'top:'+(rect.bottom+4)+'px'};left:${rect.left}px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:360px;max-height:380px;overflow-y:auto`;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const showAbove = spaceBelow < 300 && spaceAbove > spaceBelow;
+    const maxH = showAbove ? Math.min(380, spaceAbove) : Math.min(380, spaceBelow);
+    const left = Math.min(rect.left, window.innerWidth - 376);
+    popup.style.cssText = `position:fixed;${showAbove?'bottom:'+(window.innerHeight-rect.top+4)+'px':'top:'+(rect.bottom+4)+'px'};left:${left}px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:360px;max-height:${maxH}px;overflow-y:auto`;
     popup.innerHTML = `
         <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px">🔍 Assign Customer from AMS360</div>
         ${r.CustomerName && r.CustomerName!=='Unknown' ? '<div style="font-size:12px;color:#6b7280;margin-bottom:8px">Current: <strong>'+esc(r.CustomerName)+'</strong></div>' : ''}
@@ -2278,9 +2281,12 @@ async function openInlinePolicyPicker(reqId, tdEl){
     const popup = document.createElement('div');
     popup.className = 'inline-popup';
     popup.setAttribute('data-inline-policy','1');
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const showAbove = spaceBelow < 300;
-    popup.style.cssText = `position:fixed;${showAbove?'bottom:'+(window.innerHeight-rect.top+4)+'px':'top:'+(rect.bottom+4)+'px'};left:${rect.left}px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:420px;max-height:400px;overflow-y:auto`;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const showAbove = spaceBelow < 320 && spaceAbove > spaceBelow;
+    const maxH = showAbove ? Math.min(420, spaceAbove) : Math.min(420, spaceBelow);
+    const left = Math.min(rect.left, window.innerWidth - 436);
+    popup.style.cssText = `position:fixed;${showAbove?'bottom:'+(window.innerHeight-rect.top+4)+'px':'top:'+(rect.bottom+4)+'px'};left:${left}px;z-index:9999;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 15px 40px rgba(0,0,0,0.15);padding:16px;width:420px;max-height:${maxH}px;overflow-y:auto`;
     popup.onclick = function(e){ e.stopPropagation(); };
 
     if(!r.AmsCustomerId){
