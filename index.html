@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 28;
+    var FORCE_REFRESH_VERSION = 30;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -1410,19 +1410,18 @@ function applyFilters(){
         const isPending = r.Status.startsWith('Pending');
         const pendingHasResponse = isPending && (r.HasCustomerResponse || r.HasCarrierResponse);
 
-        // Tab filtering
+        // Tab filtering — skip when filtering by calendar day (show all for that day)
+        if(!dayF){
         if(tab==='myCerts'){
             if(r.AssignedId!==currentUserId) return false;
             if(r.Archived) return false;
-            if(isPending && !pendingHasResponse) return false; // hide pending without responses from My Requests too
+            if(isPending && !pendingHasResponse) return false;
         }
         if(tab==='allCerts'){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(r.Status==='Completed') return false;
-            // Hide pending items UNLESS they have a response (came back)
             if(isPending && !pendingHasResponse) return false;
-            // Customer/Carrier Replied always visible
         }
         if(tab==='myPending'){
             if(!isPending) return false;
@@ -1435,6 +1434,7 @@ function applyFilters(){
         if(tab==='archived'){
             if(!r.Archived) return false;
         }
+        } // end !dayF
 
         if(statFilter){
             const dl = r.Deadline ? new Date(r.Deadline) : null; if(dl) dl.setHours(0,0,0,0);
@@ -1496,9 +1496,9 @@ function clearFilters(){
     document.getElementById('fPriority').value='';
     document.getElementById('fHasNotif').checked=false;
     document.getElementById('fSla').value='';
-    if(typeof _calDayFilter!=='undefined') _calDayFilter=null;
+    _calDayFilter=null;
     statFilter=null; page=1;
-    updateStats(); applyFilters();
+    updateStats(); renderTabs(); applyFilters();
 }
 
 function updateFilterUI(){
@@ -1511,6 +1511,11 @@ function updateFilterUI(){
     if(document.getElementById('fType').value) tags.push({type:'type',label:'Type: '+document.getElementById('fType').value});
     if(document.getElementById('fPriority').value) tags.push({type:'priority',label:'Priority: '+document.getElementById('fPriority').value});
     if(document.getElementById('fHasNotif').checked) tags.push({type:'notif',label:'Has Responses'});
+    if(_calDayFilter){
+        const d=new Date(_calDayFilter+'T12:00:00');
+        const monNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        tags.push({type:'day',label:'📅 '+monNames[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()});
+    }
 
     const c=document.getElementById('activeFilters');
     const b=document.getElementById('clearBtn');
@@ -1528,6 +1533,7 @@ function removeFilter(type){
     if(type==='type')document.getElementById('fType').value='';
     if(type==='priority')document.getElementById('fPriority').value='';
     if(type==='notif')document.getElementById('fHasNotif').checked=false;
+    if(type==='day'){ _calDayFilter=null; tab='allCerts'; }
     updateStats(); applyFilters();
 }
 
@@ -2761,12 +2767,15 @@ function openCalendarModal(){
     const now = new Date();
     _calYear = now.getFullYear(); _calMonth = now.getMonth();
     _calSelectedDay = null; _showMonthPicker=false; _showZmanPicker=false;
+    document.getElementById('calSelDayPanel').style.display='none';
     renderCalendar();
     renderZmanGrid();
     document.getElementById('calModal').style.display = 'flex';
 }
 function closeCalendarModal(){
     document.getElementById('calModal').style.display='none';
+    _calSelectedDay = null;
+    document.getElementById('calSelDayPanel').style.display='none';
     _showMonthPicker=false; _showZmanPicker=false;
 }
 function calGoToday(){
@@ -2920,8 +2929,11 @@ function calDayClick(iso){
 function calDayFilter(){
     if(!_calSelectedDay) return;
     _calDayFilter = _calSelectedDay;
-    applyFilters();
+    tab = 'allCerts';
+    statFilter = null;
     closeCalendarModal();
+    renderTabs();
+    applyFilters();
 }
 function renderSelDayPanel(iso){
     const panel=document.getElementById('calSelDayPanel');
