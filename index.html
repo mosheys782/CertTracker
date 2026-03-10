@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 1;
+    var FORCE_REFRESH_VERSION = 9;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -326,7 +326,7 @@
         <!-- Grid -->
         <div class="grid" id="gridContainer">
             <table class="grid-table"><thead><tr>
-                <th style="min-width:250px">REQUEST</th><th>POLICY</th><th>SUBJECT</th><th style="text-align:center">DEADLINE</th><th style="text-align:center">STATUS</th><th style="text-align:center">ASSIGNED</th><th style="text-align:center">AGE</th><th style="text-align:center;width:80px"></th>
+                <th style="min-width:250px">REQUEST</th><th>POLICY</th><th>SUBJECT</th><th style="text-align:center">DEADLINE</th><th style="text-align:center">STATUS</th><th style="text-align:center">ASSIGNED</th><th style="text-align:center;min-width:160px">AGE</th><th style="text-align:center;width:80px"></th>
             </tr></thead><tbody id="gridBody"><tr><td colspan="8" class="loading"><div class="spinner"></div>Loading requests...</td></tr></tbody></table>
             <div class="pagination" id="pagination" style="display:none">
                 <div class="pagination-left"><div id="pageInfo"></div><div class="page-size-select">Show <select id="pageSize" onchange="changePageSize(this.value)"><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select> per page</div></div>
@@ -346,7 +346,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 1;
+const APP_VERSION = 9;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -793,6 +793,10 @@ async function loadRequests(silent=false){
         }
 
         console.log('Loaded', requests.length, 'cert requests');
+        // DEBUG sort diagnosis — top 8 by activity date (remove once sort confirmed working)
+        const _sortTs=r=>{for(const raw of[r.LastActivityAt,r.EmailReceivedAt,r.CreatedAt]){if(!raw)continue;const d=new Date(raw);if(!isNaN(d))return d.getTime();}return 0;};
+        const _dbg=[...requests].sort((a,b)=>_sortTs(b)-_sortTs(a));
+        console.table(_dbg.slice(0,8).map(r=>({RefId:r.RefId,LastActivityAt:r.LastActivityAt||'(empty)',EmailReceivedAt:r.EmailReceivedAt||'(empty)',sortKey:new Date(_sortTs(r)).toISOString(),HasResponse:!!(r.HasCustomerResponse||r.HasCarrierResponse)})));
         buildAssigneeFilter();
         renderAll();
     } catch(e){
@@ -1022,15 +1026,30 @@ function applyFilters(){
         return true;
     });
 
-    // Sort: responses on top, then by latest activity
+    // Sort: by most recent activity (reply time if has reply, else open time) — newest first
+    // No grouping — one unified sort so newest email/reply always wins
+    function validTs(raw){ if(!raw) return 0; const d=new Date(raw); return isNaN(d)?0:d.getTime(); }
+    function replyTs(r){
+        // Real reply time: LastActivityAt if distinct from open, else ModifiedAt if has response flag
+        const openTs = validTs(r.EmailReceivedAt) || validTs(r.CreatedAt);
+        const actTs = validTs(r.LastActivityAt);
+        if(actTs && actTs !== openTs) return actTs;
+        if((r.HasCustomerResponse||r.HasCarrierResponse) && r.ModifiedAt){
+            const modTs = validTs(r.ModifiedAt);
+            if(modTs && modTs !== openTs) return modTs;
+        }
+        return 0; // no reply
+    }
+
     filtered.sort((a,b) => {
-        // Responses bubble to top
-        const aN=(a.HasCustomerResponse||a.HasCarrierResponse)?1:0, bN=(b.HasCustomerResponse||b.HasCarrierResponse)?1:0;
-        if(aN!==bN) return bN-aN;
-        // By LastActivityAt (set on import, reply, status change), fall back to EmailReceivedAt
-        const dA=new Date(a.LastActivityAt||a.EmailReceivedAt||a.CreatedAt||0);
-        const dB=new Date(b.LastActivityAt||b.EmailReceivedAt||b.CreatedAt||0);
-        return dB-dA;
+        const aReply = replyTs(a), bReply = replyTs(b);
+        const aHas = aReply > 0, bHas = bReply > 0;
+        // Items with replies always above items without
+        if(aHas !== bHas) return aHas ? -1 : 1;
+        // Both have replies: sort by reply time newest first
+        if(aHas && bHas) return bReply - aReply;
+        // Neither has reply: sort by open date newest first
+        return (validTs(b.EmailReceivedAt)||validTs(b.CreatedAt)) - (validTs(a.EmailReceivedAt)||validTs(a.CreatedAt));
     });
 
     renderTable();
@@ -1091,7 +1110,11 @@ function renderTable(){
     body.innerHTML = items.map(r => {
         const ts = TYPE_STYLES[r.RequestType]||{cls:'cert',icon:'📜'};
         const badge = getDeadlineBadge(r.Deadline);
-        const age = getAge(r.LastActivityAt || r.EmailReceivedAt || r.CreatedAt);
+        const openDate = r.EmailReceivedAt || r.CreatedAt || '';
+        let lastReply = (r.LastActivityAt && r.LastActivityAt !== openDate) ? r.LastActivityAt : '';
+        if(!lastReply && (r.HasCustomerResponse || r.HasCarrierResponse) && r.ModifiedAt && r.ModifiedAt !== openDate) lastReply = r.ModifiedAt;
+        // Pill shows age of most recent activity (reply if exists, else open date)
+        const age = getAge(lastReply || openDate);
         const color = STATUS_COLORS[r.Status]||'#6b7280';
         const aName = r.AssignedName||'Unassigned';
         const ac = r.AssignedId ? acolor(r.AssignedId, r.AssignedName) : '#9ca3af';
@@ -1141,7 +1164,17 @@ function renderTable(){
                 ${r.ReopenedFrom?'<div style="font-size:10px;color:#d97706;font-weight:600;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:3px">⚡ Reopened from '+esc(r.ReopenedFrom)+'</div>':''}
             </td>
             <td class="assignee-cell"><div class="assignee-badge" style="background:${ac}15;color:${ac}" onclick="openAssigneeDD('${r.id}',this)"><div class="init" style="background:${ac}">${initials(aName)}</div><span class="name">${esc(aName)}</span></div></td>
-            <td class="age-cell"><div class="age-pill ${age.cls}">${age.text}</div><div style="font-size:10px;color:#94a3b8;margin-top:2px">${r.EmailReceivedAt?fmtDateTime(r.EmailReceivedAt):r.CreatedAt?fmtDateTime(r.CreatedAt):''}</div></td>
+            <td class="age-cell">
+                ${lastReply ? `
+                  <div style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#16a34a;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap">↩ Reply ${getAge(lastReply).text}</div>
+                  <div style="font-size:10px;color:#16a34a;margin-top:2px;margin-bottom:6px">${fmtDateTime(lastReply)}</div>
+                  <div style="display:inline-flex;align-items:center;gap:5px;background:${r.SlaBreached?'#fef2f2':'#f1f5f9'};color:${r.SlaBreached?'#dc2626':'#64748b'};border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap">📨 Opened ${getAge(openDate).text}</div>
+                  <div style="font-size:10px;color:${r.SlaBreached?'#dc2626':'#94a3b8'};margin-top:2px">${fmtDateTime(openDate)}</div>
+                ` : `
+                  <div class="age-pill ${age.cls}">${age.text}</div>
+                  <div style="font-size:10px;color:#94a3b8;margin-top:2px">${openDate?fmtDateTime(openDate):'—'}</div>
+                `}
+            </td>
             <td style="text-align:center"><div style="display:flex;gap:6px;justify-content:center">
                 <button class="front-btn" onclick="openFront('${esc(frontConvId)}')" title="Open in Front">✉️</button>
                 <button class="action-btn" onclick="openPanel('${r.id}')" title="Details">📋</button>
