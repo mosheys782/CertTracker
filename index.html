@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 21;
+    var FORCE_REFRESH_VERSION = 28;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -333,15 +333,19 @@
         </header>
 
         <!-- Today Banner -->
-        <div class="today-bar" id="todayBar" title="Click to open calendar">
-            <span class="tb-icon" onclick="openCalendarModal()" style="cursor:pointer">📅</span>
-            <div style="flex:1" onclick="openCalendarModal()" style="cursor:pointer">
-                <div class="tb-main" id="tbMain">Loading...</div>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
-                    <span class="tb-heb" id="tbHeb"></span>
-                    <div id="tbBadges" style="display:contents"></div>
+        <div class="today-bar" id="todayBar" style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+            <!-- Left: date + Hebrew -->
+            <div onclick="openCalendarModal()" style="cursor:pointer;display:flex;align-items:center;gap:14px;flex:1;min-width:0">
+                <span class="tb-icon">📅</span>
+                <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                    <div class="tb-main" id="tbMain">Loading...</div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span class="tb-heb" id="tbHeb"></span>
+                        <div id="tbBadges" style="display:contents"></div>
+                    </div>
                 </div>
             </div>
+            <!-- Right: closed days -->
             <button onclick="toggleClosedDaysPanel(event)" id="tbClosedBtn" style="flex-shrink:0;padding:5px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
                 🚫 <span id="tbClosedCount">0</span> Closed Days
             </button>
@@ -937,12 +941,15 @@ async function getToken(){
 
 function signOut(){ msal.logoutPopup(); }
 
+var _currentFirstName = '';
+
 async function showApp(){
     document.getElementById('login').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     document.getElementById('appHeader').classList.add('visible');
     const name = user.name || user.username || 'User';
-    document.getElementById('userName').textContent = name.split(' ')[0];
+    _currentFirstName = name.split(' ')[0];
+    document.getElementById('userName').textContent = _currentFirstName;
     document.getElementById('appVersion').textContent = 'v' + APP_VERSION;
     loadPageSizePreference();
     loadManualClosed();
@@ -2669,8 +2676,20 @@ function saveManualClosedLocal(){
 function renderTodayBanner(){
     const info = getTodayHebInfo();
     const now = new Date();
+    const hour = now.getHours();
     const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // Time-based greeting
+    let greeting, greetEmoji;
+    if(hour >= 5 && hour < 12){  greeting = 'Good morning'; greetEmoji = '☀️'; }
+    else if(hour >= 12 && hour < 17){ greeting = 'Good afternoon'; greetEmoji = '🌤️'; }
+    else if(hour >= 17 && hour < 21){ greeting = 'Good evening'; greetEmoji = '🌆'; }
+    else { greeting = 'Good night'; greetEmoji = '🌙'; }
+    const nameStr = _currentFirstName ? ', ' + _currentFirstName : '';
+
+
+
     document.getElementById('tbMain').textContent =
         'Today  ' + dayNames[now.getDay()] + ', ' + monNames[now.getMonth()] + ' ' + now.getDate();
     document.getElementById('tbHeb').textContent = info.hebDayName + ' · ' + info.hebStr;
