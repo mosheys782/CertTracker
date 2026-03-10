@@ -1288,6 +1288,7 @@ function renderTable(){
                     <span class="type-badge ${ts.cls}">${priorityDot}${esc(r.RequestType)}</span>
                     ${hasCustomer
                         ? '<div class="cust-name">'+esc(r.CustomerName)+'</div>'
+                            + (r.AmsCustomerId ? '<a style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#2563eb;text-decoration:none;margin-top:2px" href="https://www.ams360.com/v2512561/NextGen/Customer/Detail/'+esc(r.AmsCustomerId)+'" target="_blank" onclick="event.stopPropagation()">🔗 Open in AMS360</a>' : '')
                         : '<div style="font-size:12px;color:#94a3b8;font-style:italic;margin-top:3px">No customer assigned</div>'
                     }
                     <div class="ref-id">${esc(r.RefId)}</div>
@@ -1299,7 +1300,6 @@ function renderTable(){
                     ${carriers.length ? '<div style="font-size:12px;font-weight:600;color:#111827">'+carriers.join(', ')+'</div>' : ''}
                     <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">${r.policies.map(p=>'<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;background:#f1f5f9;color:#475569;font-family:monospace">'+esc(p.num)+'</span>').join('')}</div>
                     <div style="font-size:11px;color:#6b7280;margin-top:2px">${(r.policies||[]).map(p=>p.type).filter((v,i,a)=>v&&a.indexOf(v)===i).join(', ')}</div>
-                    ${r.AmsCustomerId?'<a class="ams-link" href="https://www.ams360.com/v2512561/NextGen/Customer/Detail/'+esc(r.AmsCustomerId)+'" target="_blank" onclick="event.stopPropagation()">🔗 AMS360</a>':''}
                 ` : `<div style="font-size:12px;color:#94a3b8;font-style:italic">No policy assigned</div>`}
             </td>
             <td>
