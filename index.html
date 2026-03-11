@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 50;
+    var FORCE_REFRESH_VERSION = 59;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -443,31 +443,36 @@
             <div class="sla-divider"></div>
             <div class="sla-item"><div class="sla-icon" style="background:#dcfce7;color:#16a34a">✅</div><div><div class="sla-label">Completed Today</div><div class="sla-val" id="slaToday" style="color:#16a34a">0</div></div></div>
             <div class="sla-divider"></div>
-            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='newReq';applyFilters()">
+            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='newReqBreach';applyFilters()" title="Click to filter breached">
                 <div class="sla-icon" style="background:#fef3c7;color:#d97706">📋</div>
-                <div><div class="sla-label">New Req SLA</div>
-                <div style="display:flex;gap:8px;align-items:baseline">
-                    <div class="sla-val" id="slaNrOk" style="color:#16a34a">0</div><div style="font-size:11px;color:#16a34a">ok</div>
-                    <div class="sla-val" id="slaNrBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
-                </div></div>
+                <div>
+                    <div class="sla-label">New Req SLA <span style="font-size:10px;color:#94a3b8;font-weight:400">(1h)</span></div>
+                    <div style="display:flex;gap:8px;align-items:baseline">
+                        <div class="sla-val" id="slaNrOk" style="color:#16a34a">0</div><div style="font-size:11px;color:#16a34a">ok</div>
+                        <div class="sla-val" id="slaNrBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
+                    </div>
+                </div>
             </div>
             <div class="sla-divider"></div>
-            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='response';applyFilters()">
+            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='responseBreach';applyFilters()" title="Click to filter breached">
                 <div class="sla-icon" style="background:#fff7ed;color:#ea580c">💬</div>
-                <div><div class="sla-label">Response SLA</div>
-                <div style="display:flex;gap:8px;align-items:baseline">
-                    <div class="sla-val" id="slaRespOk" style="color:#16a34a">0</div><div style="font-size:11px;color:#16a34a">ok</div>
-                    <div class="sla-val" id="slaRespBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
-                </div></div>
+                <div>
+                    <div class="sla-label">Response SLA <span style="font-size:10px;color:#94a3b8;font-weight:400">(1h)</span></div>
+                    <div style="display:flex;gap:8px;align-items:baseline">
+                        <div class="sla-val" id="slaRespOk" style="color:#16a34a">0</div><div style="font-size:11px;color:#16a34a">ok</div>
+                        <div class="sla-val" id="slaRespBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
+                    </div>
+                </div>
             </div>
             <div class="sla-divider"></div>
-            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='breached';applyFilters()">
+            <div class="sla-item" style="cursor:pointer" onclick="document.getElementById('fSla').value='resolutionBreach';applyFilters()" title="Click to filter breached">
                 <div class="sla-icon" style="background:#fef2f2;color:#dc2626">🚨</div>
-                <div><div class="sla-label">Resolution SLA</div>
-                <div style="display:flex;gap:8px;align-items:baseline">
-                    <div class="sla-val" id="slaResOk" style="color:#16a34a">0</div><div style="font-size:11px;color:#16a34a">ok</div>
-                    <div class="sla-val" id="slaResBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
-                </div></div>
+                <div>
+                    <div class="sla-label">Resolution SLA <span style="font-size:10px;color:#94a3b8;font-weight:400">(24h)</span></div>
+                    <div style="display:flex;gap:8px;align-items:baseline">
+                        <div class="sla-val" id="slaResBreach" style="color:#dc2626">0</div><div style="font-size:11px;color:#dc2626">breached</div>
+                    </div>
+                </div>
             </div>
             <div class="sla-divider"></div>
             <div class="sla-item"><div class="sla-icon" style="background:#f5f3ff;color:#7c3aed">🎯</div><div><div class="sla-label">Working Hours</div><div class="sla-val" style="color:#7c3aed;font-size:12px">M-Th 9-5 / F 9-1</div></div></div>
@@ -489,8 +494,12 @@
                 <select id="fSla" onchange="applyFilters()" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;min-width:140px;cursor:pointer;background:#fff;color:#334155;font-family:inherit">
                     <option value="">All SLAs</option>
                     <option value="newReq">⏱️ New Request SLA</option>
-                    <option value="response">🔴 Response SLA</option>
+                    <option value="newReqBreach">🚨 New Req — Breached</option>
+                    <option value="response">💬 Response SLA</option>
+                    <option value="responseBreach">🚨 Response — Breached</option>
                     <option value="resolution">📊 Resolution SLA</option>
+                    <option value="resolutionBreach">🚨 Resolution — Breached</option>
+                    <option value="breached">🔴 Any SLA Breached</option>
                     <option value="breached">🚨 Any Breached</option>
                 </select>
                 <button class="clear-btn" id="clearBtn" onclick="clearFilters()">✕ Clear</button>
@@ -521,7 +530,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 49;
+const APP_VERSION = 58;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -771,14 +780,15 @@ function getSlaInfo(r){
         const minsLeft=breached?0:Math.round((dl-now)/60000);
         res.newReq={deadline:dl,breached,label:breached?'BREACHED':'~'+minsLeft+'m left'};
     }
-    // SLA 2: Response — 1 working hour from Customer/Carrier Replied
-    if(REPLIED_STATUSES.includes(r.Status)&&r.LastActivityAt){
-        const rt=new Date(r.LastActivityAt); const dl=addWorkingMinutes(rt,60); const breached=now>dl;
+    // SLA 2: Response — 1 working hour from when reply was detected (ModifiedAt = when SP was updated)
+    // Only fires when HasCustomerResponse or HasCarrierResponse is true and item is active
+    if(isActive&&(r.HasCustomerResponse||r.HasCarrierResponse)&&r.ModifiedAt){
+        const rt=new Date(r.ModifiedAt); const dl=addWorkingMinutes(rt,60); const breached=now>dl;
         const minsLeft=breached?0:Math.round((dl-now)/60000);
         res.response={deadline:dl,breached,label:breached?'BREACHED':'~'+minsLeft+'m left'};
     }
-    // SLA 3: Resolution — 24 working hours from open, or Deadline field
-    if(open&&isActive){
+    // SLA 3: Resolution — 24 working hours from open, or Deadline field — excludes pending items
+    if(open&&isActive&&!r.Status.startsWith('Pending')){
         let dl;
         if(r.Deadline){ dl=new Date(r.Deadline); dl.setHours(17,0,0,0); }
         else{ dl=addWorkingMinutes(open,24*60); }
@@ -1216,6 +1226,21 @@ async function loadRequests(silent=false){
 
         console.log('Loaded', requests.length, 'cert requests');
 
+        // Auto-move pending items to Customer/Carrier Replied if a reply was detected
+        const pendingWithReply = requests.filter(r =>
+            r.Status.startsWith('Pending') && (r.HasCustomerResponse || r.HasCarrierResponse)
+        );
+        for(const r of pendingWithReply){
+            const newStatus = r.HasCustomerResponse ? 'Customer Replied' : 'Carrier Replied';
+            try {
+                await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${r.id}/fields`,
+                    { method:'PATCH', body:JSON.stringify({ Status: newStatus, LastActivityAt: new Date().toISOString() }) });
+                r.Status = newStatus;
+                r.LastActivityAt = new Date().toISOString();
+                console.log(`Auto-moved ${r.RefId} from Pending → ${newStatus}`);
+            } catch(e){ console.warn('Failed to auto-move', r.RefId, e); }
+        }
+
         buildAssigneeFilter();
         renderAll();
     } catch(e){
@@ -1351,17 +1376,16 @@ function updateStats(){
 
     // New Request SLA counts
     let nrOk=0, nrBreach=0, respOk=0, respBreach=0, resOk=0, resBreach=0;
-    requests.forEach(r=>{
+    requests.filter(r=>!r.Archived&&!EXIT_STATUSES.includes(r.Status)&&r.Status!=='Completed').forEach(r=>{
         const s=getSlaInfo(r);
         if(s.newReq){ s.newReq.breached?nrBreach++:nrOk++; }
         if(s.response){ s.response.breached?respBreach++:respOk++; }
-        if(s.resolution){ s.resolution.breached?resBreach++:resOk++; }
+        if(s.resolution && s.resolution.breached) resBreach++;
     });
     document.getElementById('slaNrOk').textContent=nrOk;
     document.getElementById('slaNrBreach').textContent=nrBreach;
     document.getElementById('slaRespOk').textContent=respOk;
     document.getElementById('slaRespBreach').textContent=respBreach;
-    document.getElementById('slaResOk').textContent=resOk;
     document.getElementById('slaResBreach').textContent=resBreach;
 }
 
@@ -1372,10 +1396,13 @@ function renderTabs(){
     const now = new Date();
     const isPendingHidden = r => {
         if(!r.Status.startsWith('Pending')) return false;
-        // Show pending if: 24h SLA passed OR has customer/carrier response
+        // Always show if customer/carrier replied
         if(r.HasCustomerResponse || r.HasCarrierResponse) return false;
-        // Check if 24h has passed since status was set (use Modified as proxy)
-        // For now, hide all pending that don't have responses
+        // Always show if pending deadline has expired
+        const dl = r.SlaResponseAt ? new Date(r.SlaResponseAt)
+                 : r.ModifiedAt ? addWorkingMinutes(new Date(r.ModifiedAt), 2*8*60) : null;
+        if(dl && new Date() > dl) return false;
+        // Otherwise hide — it's parked pending
         return true;
     };
     const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !isPendingHidden(r));
@@ -1423,16 +1450,20 @@ function applyFilters(){
 
         // Tab filtering — skip when filtering by calendar day or range (show all matching)
         if(!dayF && !rangeF){
+        const pendingDl = isPending ? (r.SlaResponseAt ? new Date(r.SlaResponseAt)
+            : r.ModifiedAt ? addWorkingMinutes(new Date(r.ModifiedAt), 2*8*60) : null) : null;
+        const pendingOverdue = pendingDl && new Date() > pendingDl;
+        const pendingVisible = pendingHasResponse || pendingOverdue;
         if(tab==='myCerts'){
             if(r.AssignedId!==currentUserId) return false;
             if(r.Archived) return false;
-            if(isPending && !pendingHasResponse) return false;
+            if(isPending && !pendingVisible) return false;
         }
         if(tab==='allCerts'){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(r.Status==='Completed') return false;
-            if(isPending && !pendingHasResponse && statFilter!=='pending') return false;
+            if(isPending && !pendingVisible && statFilter!=='pending') return false;
         }
         if(tab==='myPending'){
             if(!isPending) return false;
@@ -1474,8 +1505,11 @@ function applyFilters(){
         if(slaF){
             const s=getSlaInfo(r);
             if(slaF==='newReq'&&!s.newReq) return false;
+            if(slaF==='newReqBreach'&&!(s.newReq&&s.newReq.breached)) return false;
             if(slaF==='response'&&!s.response) return false;
+            if(slaF==='responseBreach'&&!(s.response&&s.response.breached)) return false;
             if(slaF==='resolution'&&!s.resolution) return false;
+            if(slaF==='resolutionBreach'&&!(s.resolution&&s.resolution.breached)) return false;
             if(slaF==='breached'&&!((s.newReq&&s.newReq.breached)||(s.response&&s.response.breached)||(s.resolution&&s.resolution.breached))) return false;
         }
         if(dayF){ const dt=(r.EmailReceivedAt||r.CreatedAt||'').slice(0,10); if(dt!==dayF) return false; }
@@ -1543,6 +1577,11 @@ function updateFilterUI(){
     if(document.getElementById('fType').value) tags.push({type:'type',label:'Type: '+document.getElementById('fType').value});
     if(document.getElementById('fPriority').value) tags.push({type:'priority',label:'Priority: '+document.getElementById('fPriority').value});
     if(document.getElementById('fHasNotif').checked) tags.push({type:'notif',label:'Has Responses'});
+    const slaVal = document.getElementById('fSla').value;
+    if(slaVal){
+        const slaLabels = {'newReq':'⏱️ New Req SLA','newReqBreach':'🚨 New Req Breached','response':'💬 Response SLA','responseBreach':'🚨 Response Breached','resolution':'📊 Resolution SLA','resolutionBreach':'🚨 Resolution Breached','breached':'🔴 Any SLA Breached'};
+        tags.push({type:'sla', label: slaLabels[slaVal]||slaVal});
+    }
     if(_calDayFilter){
         const d=new Date(_calDayFilter+'T12:00:00');
         const monNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1571,6 +1610,7 @@ function removeFilter(type){
     if(type==='type')document.getElementById('fType').value='';
     if(type==='priority')document.getElementById('fPriority').value='';
     if(type==='notif')document.getElementById('fHasNotif').checked=false;
+    if(type==='sla')document.getElementById('fSla').value='';
     if(type==='day'){ _calDayFilter=null; tab='allCerts'; }
     if(type==='range'){ _calRangeFilter=null; }
     updateStats(); applyFilters();
@@ -1649,6 +1689,7 @@ function renderTable(){
             <td class="status-cell">
                 <div class="status-badge" style="background:${color}15;color:${color}" onclick="openStatusDD('${r.id}',this)">${esc(r.Status)}</div>
                 ${r.ReopenedFrom?'<div style="font-size:10px;color:#d97706;font-weight:600;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:3px">⚡ Reopened from '+esc(r.ReopenedFrom)+'</div>':''}
+                ${buildPendingBadge(r)}
             </td>
             <td class="assignee-cell"><div class="assignee-badge" style="background:${ac}15;color:${ac}" onclick="openAssigneeDD('${r.id}',this)"><div class="init" style="background:${ac}">${initials(aName)}</div><span class="name">${esc(aName)}</span></div></td>
             <td class="age-cell">
@@ -1709,10 +1750,11 @@ async function setStatus(id, status){
         if(status === 'Not Related'){
             fields.Archived = true;
         }
-        // When setting to Pending, clear response flags so new replies get detected
+        // When setting to Pending, clear response flags and set 2 business day deadline
         if(status.startsWith('Pending')){
             fields.HasCustomerResponse = false;
             fields.HasCarrierResponse = false;
+            fields.SlaResponseAt = addWorkingMinutes(new Date(), 2*8*60).toISOString(); // 2 business days
         }
         // When manually setting Customer/Carrier Replied, record timestamp for SLA
         if(REPLIED_STATUSES.includes(status)){
@@ -1730,6 +1772,7 @@ async function setStatus(id, status){
             if(fields.Archived!==undefined) r.Archived=fields.Archived;
             if(fields.HasCustomerResponse!==undefined) r.HasCustomerResponse=fields.HasCustomerResponse;
             if(fields.HasCarrierResponse!==undefined) r.HasCarrierResponse=fields.HasCarrierResponse;
+            if(fields.SlaResponseAt!==undefined) r.SlaResponseAt=fields.SlaResponseAt;
         }
         // Archive Front conversations when Completed
         if(status === 'Completed' && r && CONFIG.frontProxyUrl){
@@ -2099,6 +2142,68 @@ async function markRead(id, type){
 // ════════════════════════════════════════════════════════════════════
 //  FRONT APP — Link, Unlink, Refresh conversations
 // ════════════════════════════════════════════════════════════════════
+function buildPendingBadge(r){
+    if(!r.Status.startsWith('Pending')) return '';
+    const now = new Date();
+    // Use SlaResponseAt if set, otherwise estimate from ModifiedAt + 2 business days
+    let dl = null;
+    if(r.SlaResponseAt) dl = new Date(r.SlaResponseAt);
+    else if(r.ModifiedAt) dl = addWorkingMinutes(new Date(r.ModifiedAt), 2*8*60);
+    const overdue = dl && now > dl;
+    const diffMs = dl ? Math.abs(dl - now) : 0;
+    const diffH = Math.floor(diffMs/3600000);
+    const diffD = Math.floor(diffH/24);
+    const ageLabel = diffD>0 ? diffD+'d' : diffH+'h';
+    const badgeStyle = overdue
+        ? 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca'
+        : 'background:#fef3c7;color:#d97706;border:1px solid #fde68a';
+    const icon = overdue ? '⚡' : '⏳';
+    const label = dl ? (overdue ? icon+' Overdue '+ageLabel : icon+' '+ageLabel+' left') : icon+' Pending';
+    return '<div style="margin-top:5px;display:flex;align-items:center;gap:4px;justify-content:center;flex-wrap:wrap">'
+        + '<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap;'+badgeStyle+'">'+label+'</span>'
+        + '<button onclick="event.stopPropagation();openExtendPending(\''+r.id+'\',this)" title="Extend deadline" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 5px;cursor:pointer;font-size:11px;color:#64748b">📅</button>'
+        + '</div>';
+}
+
+function openExtendPending(id, btn){
+    // Remove any existing extend picker
+    document.querySelectorAll('.extend-pending-picker').forEach(e=>e.remove());
+    const r = requests.find(x=>x.id===id);
+    if(!r) return;
+    const current = r.SlaResponseAt ? r.SlaResponseAt.slice(0,10) : new Date().toISOString().slice(0,10);
+    const picker = document.createElement('div');
+    picker.className = 'extend-pending-picker';
+    picker.style.cssText = 'position:absolute;z-index:999;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);min-width:220px';
+    picker.innerHTML = `
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">📅 Extend Pending Until</div>
+        <input type="date" id="extendDate_${id}" value="${current}" min="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:7px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;margin-bottom:8px">
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+            <button onclick="this.closest('.extend-pending-picker').remove()" style="padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#f9fafb;font-size:12px;cursor:pointer;color:#6b7280">Cancel</button>
+            <button onclick="saveExtendPending('${id}')" style="padding:5px 12px;border:none;border-radius:6px;background:#2563eb;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Save</button>
+        </div>`;
+    const rect = btn.getBoundingClientRect();
+    picker.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    picker.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 240) + 'px';
+    document.body.appendChild(picker);
+    setTimeout(()=>document.addEventListener('click', function h(e){ if(!picker.contains(e.target)&&e.target!==btn){ picker.remove(); document.removeEventListener('click',h); } }), 10);
+}
+
+async function saveExtendPending(id){
+    const input = document.getElementById('extendDate_'+id);
+    if(!input) return;
+    const date = input.value;
+    if(!date){ toast('Please select a date','err'); return; }
+    const dl = new Date(date+'T17:00:00'); // end of business day
+    try {
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${id}/fields`,
+            { method:'PATCH', body:JSON.stringify({ SlaResponseAt: dl.toISOString() }) });
+        const r = requests.find(x=>x.id===id);
+        if(r) r.SlaResponseAt = dl.toISOString();
+        document.querySelectorAll('.extend-pending-picker').forEach(e=>e.remove());
+        toast('Pending deadline extended','ok');
+        applyFilters();
+    } catch(e){ toast('Failed to save','err'); }
+}
 function openFront(convId){
     if(!convId){ toast('No Front conversation linked',''); return; }
     window.open('https://app.frontapp.com/open/' + convId, '_blank');
