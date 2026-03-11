@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 30;
+    var FORCE_REFRESH_VERSION = 40;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -504,7 +504,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 8;
+const APP_VERSION = 39;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -1198,10 +1198,7 @@ async function loadRequests(silent=false){
         }
 
         console.log('Loaded', requests.length, 'cert requests');
-        // DEBUG sort diagnosis — top 8 by activity date (remove once sort confirmed working)
-        const _sortTs=r=>{for(const raw of[r.LastActivityAt,r.EmailReceivedAt,r.CreatedAt]){if(!raw)continue;const d=new Date(raw);if(!isNaN(d))return d.getTime();}return 0;};
-        const _dbg=[...requests].sort((a,b)=>_sortTs(b)-_sortTs(a));
-        console.table(_dbg.slice(0,8).map(r=>({RefId:r.RefId,LastActivityAt:r.LastActivityAt||'(empty)',EmailReceivedAt:r.EmailReceivedAt||'(empty)',sortKey:new Date(_sortTs(r)).toISOString(),HasResponse:!!(r.HasCustomerResponse||r.HasCarrierResponse)})));
+
         buildAssigneeFilter();
         renderAll();
     } catch(e){
@@ -1476,9 +1473,16 @@ function applyFilters(){
     function validTs(raw){ if(!raw) return 0; const d=new Date(raw); return isNaN(d)?0:d.getTime(); }
     function sortKey(r){
         const openTs = validTs(r.EmailReceivedAt) || validTs(r.CreatedAt);
-        // If LastActivityAt is distinct from EmailReceivedAt, a real reply was recorded — use it
-        const actTs = validTs(r.LastActivityAt);
-        if(actTs && actTs !== validTs(r.EmailReceivedAt)) return actTs;
+        const hasReply = r.HasCustomerResponse || r.HasCarrierResponse;
+        if(hasReply){
+            // Use the most recent of all available timestamps to find the actual reply time
+            const replyTs = Math.max(
+                validTs(r.LastActivityAt),
+                validTs(r.SlaResponseAt),
+                validTs(r.ModifiedAt)
+            );
+            return replyTs || openTs;
+        }
         return openTs;
     }
 
