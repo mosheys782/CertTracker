@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 40;
+    var FORCE_REFRESH_VERSION = 41;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -107,7 +107,7 @@
         .sla-divider{width:1px;height:36px;background:#e2e8f0}
 
         /* ═══ STAT CARDS ═══ */
-        .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px}
+        .stats{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:24px}
         .stat{background:#fff;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.1);cursor:pointer;transition:all 0.2s;border-left:4px solid}
         .stat:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,0.1)}
         .stat.active{box-shadow:0 0 0 2px #3b82f6,0 8px 25px rgba(0,0,0,0.1)}
@@ -411,12 +411,24 @@
                             </div>
                             <div style="display:flex;align-items:center;gap:6px">
                                 <button id="calMarkClosedBtn" onclick="toggleSelDayClosed()" style="border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid"></button>
-                                <button onclick="calDayFilter()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;color:#2563eb;cursor:pointer">🔍 Filter emails</button>
+                                <button onclick="calDayFilter()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;color:#2563eb;cursor:pointer">🔍 Filter day</button>
                                 <button onclick="_calSelectedDay=null;document.getElementById('calSelDayPanel').style.display='none';renderCalendar()" style="background:#f1f5f9;border:none;border-radius:4px;padding:3px 8px;cursor:pointer;color:#64748b;font-size:11px">✕</button>
                             </div>
                         </div>
                     </div>
-
+                    <!-- Date Range Filter -->
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                        <span style="font-size:12px;font-weight:600;color:#374151">📆 Date Range:</span>
+                        <input type="date" id="calRangeFrom" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">
+                        <span style="font-size:12px;color:#6b7280">to</span>
+                        <input type="date" id="calRangeTo" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">
+                        <select id="calRangeField" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;color:#374151">
+                            <option value="received">By received date</option>
+                            <option value="completed">By completed date</option>
+                        </select>
+                        <button onclick="applyCalRangeFilter()" style="padding:5px 12px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">🔍 Filter Range</button>
+                        <button onclick="clearCalRangeFilter()" style="padding:5px 10px;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;cursor:pointer">✕ Clear</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -504,7 +516,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 39;
+const APP_VERSION = 40;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -1291,29 +1303,24 @@ function changePageSize(size){
 function updateStats(){
     const today = new Date(); today.setHours(0,0,0,0);
     const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && r.Status!=='Completed');
+    const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
     const counts = {
-        newReq:     active.filter(r => r.Status==='New Request').length,
-        pastDue:    active.filter(r => { const d=new Date(r.Deadline);d.setHours(0,0,0,0); return d<today; }).length,
-        dueToday:   active.filter(r => { const d=new Date(r.Deadline);d.setHours(0,0,0,0); return d.getTime()===today.getTime(); }).length,
-        pending:    active.filter(r => r.Status.startsWith('Pending')).length,
-        inProgress: active.filter(r => ['In Review','Processing'].includes(r.Status)).length,
-        custResp:   active.filter(r => r.HasCustomerResponse).length,
-        carrResp:   active.filter(r => r.HasCarrierResponse).length,
-        completed:  requests.filter(r => !r.Archived && r.Status==='Completed').length,
-        unassigned: active.filter(r => !r.AssignedId).length,
-        slaBreach:  active.filter(r => r.SlaBreached).length,
+        newReq:      active.filter(r => r.Status==='New Request').length,
+        pending:     active.filter(r => r.Status.startsWith('Pending')).length,
+        inProgress:  active.filter(r => ['In Review','Processing'].includes(r.Status)).length,
+        custResp:    active.filter(r => r.HasCustomerResponse).length,
+        carrResp:    active.filter(r => r.HasCarrierResponse).length,
+        completedWk: requests.filter(r => !r.Archived && r.Status==='Completed' && new Date(r.ModifiedAt)>=weekStart).length,
+        unassigned:  active.filter(r => !r.AssignedId).length,
     };
     const cards = [
-        {key:'newReq',label:'New Requests',num:counts.newReq,color:'red',icon:'🚨'},
-        {key:'pastDue',label:'Past Due',num:counts.pastDue,color:'rose',icon:'⏰'},
-        {key:'dueToday',label:'Due Today',num:counts.dueToday,color:'yellow',icon:'📅'},
-        {key:'pending',label:'Pending',num:counts.pending,color:'purple',icon:'⏳'},
-        {key:'inProgress',label:'In Progress',num:counts.inProgress,color:'blue',icon:'🔄'},
-        {key:'custResp',label:'Customer Replies',num:counts.custResp,color:'sky',icon:'💬'},
-        {key:'carrResp',label:'Carrier Replies',num:counts.carrResp,color:'orange',icon:'🏢'},
-        {key:'completed',label:'Completed',num:counts.completed,color:'green',icon:'✅'},
-        {key:'unassigned',label:'Unassigned',num:counts.unassigned,color:'gray',icon:'👤'},
-        {key:'slaBreach',label:'SLA Breached',num:counts.slaBreach,color:'red',icon:'❌'},
+        {key:'newReq',    label:'New Requests',     num:counts.newReq,      color:'red',    icon:'🚨'},
+        {key:'custResp',  label:'Customer Replies',  num:counts.custResp,    color:'sky',    icon:'💬'},
+        {key:'carrResp',  label:'Carrier Replies',   num:counts.carrResp,    color:'orange', icon:'🏢'},
+        {key:'pending',   label:'Pending',           num:counts.pending,     color:'purple', icon:'⏳'},
+        {key:'inProgress',label:'In Progress',       num:counts.inProgress,  color:'blue',   icon:'🔄'},
+        {key:'completedWk',label:'Completed (Week)', num:counts.completedWk, color:'green',  icon:'✅'},
+        {key:'unassigned',label:'Unassigned',        num:counts.unassigned,  color:'gray',   icon:'👤'},
     ];
     document.getElementById('statCards').innerHTML = cards.map(c =>
         `<div class="stat ${c.color}${statFilter===c.key?' active':''}" onclick="toggleStatFilter('${c.key}')"><div class="stat-info"><div class="label">${c.label}</div><div class="num">${c.num}</div></div><div class="stat-icon">${c.icon}</div></div>`
@@ -1383,7 +1390,8 @@ function renderTabs(){
 function switchTab(t){ tab=t; statFilter=null; page=1; renderTabs(); applyFilters(); }
 function toggleStatFilter(key){ 
     statFilter = statFilter===key?null:key; 
-    if(statFilter==='completed') tab='completed';
+    if(statFilter==='completedWk') tab='completed';
+    else if(statFilter==='completed') tab='completed';
     else if(statFilter) tab='allCerts'; 
     page=1; renderTabs(); applyFilters(); updateStats(); 
 }
@@ -1401,14 +1409,15 @@ function applyFilters(){
     const hasNotifF = document.getElementById('fHasNotif').checked;
     const slaF = document.getElementById('fSla').value;
     const dayF = (typeof _calDayFilter !== 'undefined') ? _calDayFilter : null;
+    const rangeF = (typeof _calRangeFilter !== 'undefined') ? _calRangeFilter : null;
     const today = new Date(); today.setHours(0,0,0,0);
 
     filtered = requests.filter(r => {
         const isPending = r.Status.startsWith('Pending');
         const pendingHasResponse = isPending && (r.HasCustomerResponse || r.HasCarrierResponse);
 
-        // Tab filtering — skip when filtering by calendar day (show all for that day)
-        if(!dayF){
+        // Tab filtering — skip when filtering by calendar day or range (show all matching)
+        if(!dayF && !rangeF){
         if(tab==='myCerts'){
             if(r.AssignedId!==currentUserId) return false;
             if(r.Archived) return false;
@@ -1443,6 +1452,11 @@ function applyFilters(){
             if(statFilter==='custResp' && !r.HasCustomerResponse) return false;
             if(statFilter==='carrResp' && !r.HasCarrierResponse) return false;
             if(statFilter==='completed' && r.Status!=='Completed') return false;
+            if(statFilter==='completedWk'){
+                if(r.Status!=='Completed') return false;
+                const wStart=new Date(today); wStart.setDate(today.getDate()-today.getDay());
+                if(new Date(r.ModifiedAt)<wStart) return false;
+            }
             if(statFilter==='unassigned' && r.AssignedId) return false;
             if(statFilter==='slaBreach' && !r.SlaBreached) return false;
         }
@@ -1460,6 +1474,14 @@ function applyFilters(){
             if(slaF==='breached'&&!((s.newReq&&s.newReq.breached)||(s.response&&s.response.breached)||(s.resolution&&s.resolution.breached))) return false;
         }
         if(dayF){ const dt=(r.EmailReceivedAt||r.CreatedAt||'').slice(0,10); if(dt!==dayF) return false; }
+        if(rangeF){
+            const dateStr = rangeF.field==='completed'
+                ? (r.ModifiedAt||'').slice(0,10)
+                : (r.EmailReceivedAt||r.CreatedAt||'').slice(0,10);
+            if(!dateStr) return false;
+            if(rangeF.from && dateStr < rangeF.from) return false;
+            if(rangeF.to   && dateStr > rangeF.to)   return false;
+        }
         if(search){
             const polText = (r.policies||[]).map(p=>p.num+' '+p.carrier+' '+p.type).join(' ');
             const txt = [r.RefId,r.CustomerName,polText,r.RequestType,r.Notes,r.CustomerEmail,r.Title].join(' ').toLowerCase();
@@ -1501,6 +1523,7 @@ function clearFilters(){
     document.getElementById('fHasNotif').checked=false;
     document.getElementById('fSla').value='';
     _calDayFilter=null;
+    _calRangeFilter=null;
     statFilter=null; page=1;
     updateStats(); renderTabs(); applyFilters();
 }
@@ -1520,6 +1543,12 @@ function updateFilterUI(){
         const monNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         tags.push({type:'day',label:'📅 '+monNames[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()});
     }
+    if(_calRangeFilter){
+        const fmt=iso=>{ if(!iso) return ''; const d=new Date(iso+'T12:00:00'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getDate(); };
+        const fieldLabel = _calRangeFilter.field==='completed' ? '✓ Completed' : '📅 Received';
+        const rangeLabel = [_calRangeFilter.from?fmt(_calRangeFilter.from):'…', _calRangeFilter.to?fmt(_calRangeFilter.to):'…'].join(' – ');
+        tags.push({type:'range', label:`${fieldLabel}: ${rangeLabel}`});
+    }
 
     const c=document.getElementById('activeFilters');
     const b=document.getElementById('clearBtn');
@@ -1538,6 +1567,7 @@ function removeFilter(type){
     if(type==='priority')document.getElementById('fPriority').value='';
     if(type==='notif')document.getElementById('fHasNotif').checked=false;
     if(type==='day'){ _calDayFilter=null; tab='allCerts'; }
+    if(type==='range'){ _calRangeFilter=null; }
     updateStats(); applyFilters();
 }
 
@@ -2836,11 +2866,15 @@ function renderCalendar(){
     const todayISO = toISO2(new Date());
     const first = new Date(y, m, 1).getDay(); // day of week of 1st
     const dim = daysInMonth(y, m);
-    // Count requests per day
+    // Count requests and completed per day
     const dayCounts = {};
+    const dayCompleted = {};
     requests.forEach(r=>{
         const dt = r.EmailReceivedAt || r.CreatedAt;
         if(dt){ const iso=dt.slice(0,10); dayCounts[iso]=(dayCounts[iso]||0)+1; }
+        if(r.Status==='Completed' && r.ModifiedAt){
+            const iso=r.ModifiedAt.slice(0,10); dayCompleted[iso]=(dayCompleted[iso]||0)+1;
+        }
     });
     let html = '';
     // Prev month padding
@@ -2893,6 +2927,7 @@ function renderCalendar(){
         const fast=getFastTimes(y,m,d);
 
         const cnt=dayCounts[iso]||0;
+        const cmplt=dayCompleted[iso]||0;
         const classes=['cal-day'];
         if(isTod)classes.push('today');
         if(isSel)classes.push('selected');
@@ -2912,7 +2947,10 @@ function renderCalendar(){
             ${candle?`<div class="cal-day-candle">🕯 ${candle}${candleSuffix}</div>`:''}
             ${havdalah?`<div style="font-size:9px;color:#6d28d9;font-weight:600;margin-top:1px">✨ ${havdalah}</div>`:''}
             ${fast?`<div style="font-size:9px;color:#dc2626;font-weight:600;margin-top:1px">⏰ ${fast.end60}</div>`:''}
-            ${cnt?`<div class="cal-day-cnt">${cnt} req</div>`:''}
+            ${cnt||cmplt?`<div style="display:flex;gap:3px;margin-top:2px;flex-wrap:wrap">
+                ${cnt?`<div class="cal-day-cnt">${cnt} req</div>`:''}
+                ${cmplt?`<div style="font-size:10px;background:#16a34a;color:#fff;border-radius:4px;padding:1px 5px;display:inline-block">✓${cmplt}</div>`:''}
+            </div>`:''}
         </div>`;
     }
     // Fill remaining cells
@@ -2933,10 +2971,30 @@ function calDayClick(iso){
 function calDayFilter(){
     if(!_calSelectedDay) return;
     _calDayFilter = _calSelectedDay;
+    _calRangeFilter = null;
     tab = 'allCerts';
     statFilter = null;
     closeCalendarModal();
     renderTabs();
+    applyFilters();
+}
+function applyCalRangeFilter(){
+    const from = document.getElementById('calRangeFrom').value;
+    const to   = document.getElementById('calRangeTo').value;
+    const field= document.getElementById('calRangeField').value;
+    if(!from && !to) return;
+    _calRangeFilter = { from: from||null, to: to||null, field };
+    _calDayFilter = null;
+    tab = field==='completed' ? 'completed' : 'allCerts';
+    statFilter = null;
+    closeCalendarModal();
+    renderTabs();
+    applyFilters();
+}
+function clearCalRangeFilter(){
+    _calRangeFilter = null;
+    document.getElementById('calRangeFrom').value = '';
+    document.getElementById('calRangeTo').value = '';
     applyFilters();
 }
 function renderSelDayPanel(iso){
@@ -3016,6 +3074,7 @@ function toggleSelDayClosed(){
     toast((mc[_calSelectedDay]?'Marked Closed':'Reopened')+': '+_calSelectedDay,'ok');
 }
 var _calDayFilter = null;
+var _calRangeFilter = null; // {from, to, field} where field = 'received' | 'completed'
 
 // ── Closed Days Panel (in today banner area) ──
 var _closedDaysPanelOpen = false;
