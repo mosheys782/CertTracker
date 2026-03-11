@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 49;
+    var FORCE_REFRESH_VERSION = 50;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -521,7 +521,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 48;
+const APP_VERSION = 49;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -546,7 +546,7 @@ const CONFIG = {
 //  CONSTANTS
 // ════════════════════════════════════════════════════════════════════
 const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied','Completed','Not Related'];
-const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#9333ea','Processing':'#0891b2','Customer Replied':'#0284c7','Carrier Replied':'#ea580c','Completed':'#16a34a','Delivered':'#059669','Not Related':'#94a3b8'};
+const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#0891b2','Processing':'#ea580c','Customer Replied':'#0284c7','Carrier Replied':'#f97316','Completed':'#16a34a','Delivered':'#059669','Not Related':'#94a3b8'};
 const EXIT_STATUSES = ['Delivered','Not Related'];
 const ACTIVE_STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied'];
 const DONE_STATUSES = ['Completed','Delivered'];
