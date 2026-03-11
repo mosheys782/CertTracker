@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 48;
+    var FORCE_REFRESH_VERSION = 49;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -521,7 +521,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 47;
+const APP_VERSION = 48;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -1432,7 +1432,7 @@ function applyFilters(){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(r.Status==='Completed') return false;
-            if(isPending && !pendingHasResponse) return false;
+            if(isPending && !pendingHasResponse && statFilter!=='pending') return false;
         }
         if(tab==='myPending'){
             if(!isPending) return false;
