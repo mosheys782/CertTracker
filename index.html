@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 44;
+    var FORCE_REFRESH_VERSION = 46;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -518,7 +518,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 43;
+const APP_VERSION = 45;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -1597,6 +1597,7 @@ function renderTable(){
         const priorityDot = r.Priority==='urgent'?'🔴 ':r.Priority==='high'?'🟠 ':'';
         const carriers = (r.policies||[]).map(p=>p.carrier).filter((v,i,a)=>a.indexOf(v)===i);
         const hasCustomer = r.CustomerName && r.CustomerName !== 'Unknown' && r.CustomerName.trim() !== '';
+        const fromEmail = (r.FrontConvFromEmails||'').split('|')[0].trim();
         const convSubjects = pipeSplit(r.FrontConvSubjects);
         const subject = convSubjects[0] || '';
         const frontConvId = r.FrontConvIds?.split('|')[0] || '';
@@ -1619,10 +1620,12 @@ function renderTable(){
                 <div class="req-icon" style="background:${color}15;color:${color}">${ts.icon}</div>
                 <div class="req-info">
                     <span class="type-badge ${ts.cls}">${priorityDot}${esc(r.RequestType)}</span>
-                    ${hasCustomer
+                    ${hasCustomer && r.AmsCustomerId
                         ? '<div class="cust-name">'+esc(r.CustomerName)+'</div>'
-                            + (r.AmsCustomerId ? '<a style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#2563eb;text-decoration:none;margin-top:2px" href="https://www.ams360.com/v2512561/NextGen/Customer/Detail/'+esc(r.AmsCustomerId)+'" target="_blank" onclick="event.stopPropagation()">🔗 Open in AMS360</a>' : '')
-                        : '<div style="font-size:12px;color:#94a3b8;font-style:italic;margin-top:3px">No customer assigned</div>'
+                            + '<a style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#2563eb;text-decoration:none;margin-top:2px" href="https://www.ams360.com/v2512561/NextGen/Customer/Detail/'+esc(r.AmsCustomerId)+'" target="_blank" onclick="event.stopPropagation()">🔗 Open in AMS360</a>'
+                        : fromEmail
+                            ? '<div class="cust-name" style="color:#64748b;font-size:12px">'+esc(fromEmail)+'</div>'
+                            : '<div style="font-size:12px;color:#94a3b8;font-style:italic;margin-top:3px">No customer assigned</div>'
                     }
                     <div class="ref-id">${esc(r.RefId)}</div>
                     ${notifHtml}
