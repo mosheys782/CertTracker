@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 46;
+    var FORCE_REFRESH_VERSION = 48;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -47,7 +47,7 @@
         .header-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
         .header-welcome{font-size:14px;opacity:0.9}
         .search-box{position:relative}
-        .search-box input{padding:10px 16px 10px 36px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);width:220px;font-size:13px;background:rgba(255,255,255,0.1);color:#fff;font-family:inherit}
+        .search-box input{padding:10px 30px 10px 36px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);width:220px;font-size:13px;background:rgba(255,255,255,0.1);color:#fff;font-family:inherit}
         .search-box input::placeholder{color:rgba(255,255,255,0.5)}
         .search-box:before{content:'🔍';position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px}
         .hdr-btn{padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px}
@@ -323,7 +323,10 @@
             </div>
             <div class="header-right">
                 <span class="header-welcome">Welcome, <span id="userName">User</span></span>
-                <div class="search-box"><input type="text" id="globalSearch" placeholder="Search requests..." oninput="applyFilters()"></div>
+                <div class="search-box" style="position:relative">
+                    <input type="text" id="globalSearch" placeholder="Search requests, conv IDs..." oninput="applyFilters();document.getElementById('searchClear').style.display=this.value?'flex':'none'">
+                    <button id="searchClear" onclick="document.getElementById('globalSearch').value='';document.getElementById('searchClear').style.display='none';applyFilters()" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.2);border:none;border-radius:50%;width:18px;height:18px;color:#fff;font-size:11px;cursor:pointer;align-items:center;justify-content:center;line-height:1;padding:0">×</button>
+                </div>
                 <button class="hdr-btn notif-bell" onclick="toggleNotifFilter()" title="Notifications">🔔 <span class="badge" id="notifBadge" style="display:none">0</span></button>
                 <button class="hdr-btn" onclick="refreshData()" title="Refresh data">🔄</button>
                 <button class="hdr-btn" onclick="importFromFront()" title="Import from Front" id="importFrontBtn">📥 Import</button>
@@ -518,7 +521,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 45;
+const APP_VERSION = 47;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -1486,7 +1489,7 @@ function applyFilters(){
         }
         if(search){
             const polText = (r.policies||[]).map(p=>p.num+' '+p.carrier+' '+p.type).join(' ');
-            const txt = [r.RefId,r.CustomerName,polText,r.RequestType,r.Notes,r.CustomerEmail,r.Title].join(' ').toLowerCase();
+            const txt = [r.RefId,r.CustomerName,polText,r.RequestType,r.Notes,r.CustomerEmail,r.Title,r.FrontConvIds].join(' ').toLowerCase();
             if(!txt.includes(search)) return false;
         }
         return true;
@@ -1596,7 +1599,8 @@ function renderTable(){
         const ac = r.AssignedId ? acolor(r.AssignedId, r.AssignedName) : '#9ca3af';
         const priorityDot = r.Priority==='urgent'?'🔴 ':r.Priority==='high'?'🟠 ':'';
         const carriers = (r.policies||[]).map(p=>p.carrier).filter((v,i,a)=>a.indexOf(v)===i);
-        const hasCustomer = r.CustomerName && r.CustomerName !== 'Unknown' && r.CustomerName.trim() !== '';
+        const hasCustomer = !!(r.AmsCustomerId);
+        const displayName = r.CustomerName && r.CustomerName !== 'Unknown' && r.CustomerName.trim() !== '' ? r.CustomerName : null;
         const fromEmail = (r.FrontConvFromEmails||'').split('|')[0].trim();
         const convSubjects = pipeSplit(r.FrontConvSubjects);
         const subject = convSubjects[0] || '';
@@ -1960,6 +1964,7 @@ function openPanel(id){
                 ${r.CustomerName?'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">👤 <strong>Customer:</strong> '+esc(r.CustomerName)+(r.AmsCustomerId?' (AMS360 linked)':'')+'</div>':''}
                 ${(r.policies||[]).length?'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">📋 <strong>Policies:</strong> '+(r.policies||[]).map(p=>p.num).join(', ')+'</div>':''}
                 <div style="display:flex;gap:8px;align-items:center;padding:4px 0">🆔 <strong>Ref:</strong> ${esc(r.RefId)} · <strong>SP ID:</strong> ${r.id}</div>
+                ${r.FrontConvIds ? '<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;border-top:1px solid #f1f5f9;margin-top:2px">🔗 <div><strong>Front Conv ID(s):</strong><div style="font-family:monospace;font-size:11px;color:#2563eb;margin-top:2px;word-break:break-all">'+r.FrontConvIds.split('|').map(id=>`<div style="cursor:pointer;text-decoration:underline" onclick="openFront('${esc(id.trim())}')" title="Open in Front">${esc(id.trim())}</div>`).join('')+'</div></div></div>' : ''}
             </div>
         </div>
         <div class="section"><h3>Other</h3><div class="field"><label>Archived</label><select id="pArchived"><option value="false"${!r.Archived?' selected':''}>No</option><option value="true"${r.Archived?' selected':''}>Yes</option></select></div></div>
