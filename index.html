@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 61;
+    var FORCE_REFRESH_VERSION = 66;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -530,7 +530,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 60;
+const APP_VERSION = 66;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -759,11 +759,20 @@ function nextWorkStart(date){
 function addWorkingMinutes(startDate, minutes){
     let d=new Date(startDate); let remaining=minutes;
     if(!isWorkingTime(d)) d=nextWorkStart(d);
+    let guard=0;
     while(remaining>0){
+        if(++guard>500) break; // safety: max 500 iterations (~100 working days)
         const et=toET(d); const day=et.getDay();
         const endH=workDayEndHour(day);
         const curH=et.getHours()+et.getMinutes()/60+et.getSeconds()/3600;
-        const minsLeft=(endH-curH)*60;
+        const minsLeft=Math.max(0,(endH-curH)*60);
+        if(minsLeft<=0){ // at or past end of day, move to next work day
+            let next=new Date(d); next.setDate(next.getDate()+1);
+            const nd=toET(next).getDay();
+            if(nd===6) next.setDate(next.getDate()+2);
+            else if(nd===0) next.setDate(next.getDate()+1);
+            d=setETHour(next,9); continue;
+        }
         if(remaining<=minsLeft){ d=new Date(d.getTime()+remaining*60000); remaining=0; }
         else{ remaining-=minsLeft; let next=new Date(d); next.setDate(next.getDate()+1); const nd=toET(next).getDay(); if(nd===6)next.setDate(next.getDate()+2); else if(nd===0)next.setDate(next.getDate()+1); d=setETHour(next,9); }
     }
@@ -771,7 +780,7 @@ function addWorkingMinutes(startDate, minutes){
 }
 function getSlaInfo(r){
     const now=new Date();
-    const open=r.EmailReceivedAt?new Date(r.EmailReceivedAt):null;
+    const open=r.EmailReceivedAt?new Date(r.EmailReceivedAt):(r.CreatedAt?new Date(r.CreatedAt):null);
     const isActive=!r.Archived&&!EXIT_STATUSES.includes(r.Status)&&r.Status!=='Completed';
     const res={newReq:null,response:null,resolution:null};
     // SLA 1: New Request — 1 working hour while status is New Request
@@ -1382,7 +1391,7 @@ function updateStats(){
         const s=getSlaInfo(r);
         if(s.newReq){ s.newReq.breached?nrBreach++:nrOk++; }
         if(s.response){ s.response.breached?respBreach++:respOk++; }
-        if(s.resolution && s.resolution.breached) resBreach++;
+        if(s.resolution){ s.resolution.breached?resBreach++:resOk++; }
     });
     document.getElementById('slaNrOk').textContent=nrOk;
     document.getElementById('slaNrBreach').textContent=nrBreach;
