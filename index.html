@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CertTracker v1 - Certificate & Endorsement Request Management -->
+<!-- CertTracker v67 - Certificate & Endorsement Request Management -->
 <!-- Production Build — SharePoint + Front App + AMS360 -->
 <html lang="en">
 <head>
@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 66;
+    var FORCE_REFRESH_VERSION = 67;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -107,13 +107,13 @@
         .sla-divider{width:1px;height:36px;background:#e2e8f0}
 
         /* ═══ STAT CARDS ═══ */
-        .stats{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:24px}
-        .stat{background:#fff;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.1);cursor:pointer;transition:all 0.2s;border-left:4px solid}
+        .stats{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:24px}
+        .stat{background:#fff;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.1);cursor:pointer;transition:all 0.2s;border-left:4px solid}
         .stat:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,0.1)}
         .stat.active{box-shadow:0 0 0 2px #3b82f6,0 8px 25px rgba(0,0,0,0.1)}
-        .stat-info .label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px}
-        .stat-info .num{font-size:26px;font-weight:700}
-        .stat-icon{font-size:24px;opacity:0.8}
+        .stat-info .label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:1px}
+        .stat-info .num{font-size:22px;font-weight:700}
+        .stat-icon{font-size:20px;opacity:0.8}
         .stat.red{border-left-color:#ef4444}.stat.red .num{color:#ef4444}
         .stat.purple{border-left-color:#7c3aed}.stat.purple .num{color:#7c3aed}
         .stat.yellow{border-left-color:#eab308}.stat.yellow .num{color:#eab308}
@@ -299,8 +299,8 @@
         .toast.err{background:#ef4444}
         .footer{text-align:center;padding:24px;color:#6b7280;font-size:13px}
 
-        @media(max-width:1200px){.stats{grid-template-columns:repeat(5,1fr)}}
-        @media(max-width:1000px){.stats{grid-template-columns:repeat(3,1fr)}.header{flex-direction:column;text-align:center}.header-right{flex-wrap:wrap;justify-content:center}}
+        @media(max-width:1200px){.stats{grid-template-columns:repeat(4,1fr)}}
+        @media(max-width:1000px){.stats{grid-template-columns:repeat(4,1fr)}.header{flex-direction:column;text-align:center}.header-right{flex-wrap:wrap;justify-content:center}}
         @media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}}
     </style>
 </head>
@@ -530,7 +530,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 66;
+const APP_VERSION = 67;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -778,6 +778,66 @@ function addWorkingMinutes(startDate, minutes){
     }
     return d;
 }
+function addWorkingDays(n, fromDate){
+    let d = new Date(fromDate || new Date());
+    let count = 0;
+    while(count < n){
+        d.setDate(d.getDate() + 1);
+        const day = toET(d).getDay();
+        if(day >= 1 && day <= 5 && !isClosedDate(d)) count++;
+    }
+    const day = toET(d).getDay();
+    return setETHour(d, day === 5 ? 13 : 17);
+}
+function countWorkingDays(from, to){
+    // Count working days in the range (from, to] — advance first, then check boundary
+    let count = 0;
+    let d = new Date(from);
+    const target = new Date(to);
+    while(true){
+        d.setDate(d.getDate() + 1);
+        if(d > target) break;
+        const day = toET(d).getDay();
+        if(day >= 1 && day <= 5 && !isClosedDate(d)) count++;
+    }
+    return count;
+}
+async function appendActivityLog(id, message){
+    const r = requests.find(x => x.id === id);
+    if(!r) return;
+    const now = new Date();
+    const dtStr = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'America/New_York'})
+        + ' ' + now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:'America/New_York'});
+    const userName = user?.name || _currentFirstName || 'Unknown';
+    const entry = '['+dtStr+' | '+userName+'] '+message;
+    const existing = r.Notes || '';
+    const updated = existing ? existing + '\n' + entry : entry;
+    try {
+        await graph('/sites/'+CONFIG.siteHost+','+CONFIG.siteId+'/lists/'+CONFIG.listId+'/items/'+id+'/fields',
+            { method:'PATCH', body:JSON.stringify({ Notes: updated }) });
+        r.Notes = updated;
+    } catch(e){ console.warn('Activity log append failed:', e); }
+}
+async function resetPendingDeadlines(){
+    if(!confirm('Reset ALL pending items to a 2-working-day deadline from right now?\n\nThis will overwrite their current deadlines.')) return;
+    const pending = requests.filter(r => !r.Archived && r.Status.startsWith('Pending'));
+    if(!pending.length){ toast('No pending items found',''); return; }
+    toast('Resetting '+pending.length+' items...','');
+    const newDl = addWorkingDays(2).toISOString();
+    let ok=0, fail=0;
+    for(const r of pending){
+        try {
+            await graph('/sites/'+CONFIG.siteHost+','+CONFIG.siteId+'/lists/'+CONFIG.listId+'/items/'+r.id+'/fields',
+                { method:'PATCH', body:JSON.stringify({ SlaResponseAt: newDl }) });
+            r.SlaResponseAt = newDl;
+            ok++;
+            // small delay to avoid throttling
+            if(pending.length > 5) await new Promise(ok => setTimeout(ok, 200));
+        } catch(e){ fail++; console.warn('Reset failed for', r.id, e); }
+    }
+    applyFilters();
+    toast('Reset '+ok+' pending items'+(fail?' ('+fail+' failed)':''), fail?'err':'ok');
+}
 function getSlaInfo(r){
     const now=new Date();
     const open=r.EmailReceivedAt?new Date(r.EmailReceivedAt):(r.CreatedAt?new Date(r.CreatedAt):null);
@@ -915,15 +975,22 @@ function getDeadlineBadge(deadline){
 // ════════════════════════════════════════════════════════════════════
 async function graph(url, opts={}, retry=true){
     if(!token) await getToken();
+    const hdrs = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    if(opts.method === 'PATCH') hdrs['If-Match'] = '*';   // avoid 409 eTag conflicts
     const r = await fetch(`https://graph.microsoft.com/v1.0${url}`, {
         ...opts,
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        headers: hdrs
     });
     if(!r.ok){
         if(r.status === 401 && retry){
             console.log('Token expired, refreshing...');
             token = null;
             await getToken();
+            return graph(url, opts, false);
+        }
+        if((r.status === 409 || r.status === 503) && retry){
+            console.log('Graph '+r.status+', retrying after delay...');
+            await new Promise(ok => setTimeout(ok, 600));
             return graph(url, opts, false);
         }
         const t = await r.text();
@@ -1286,6 +1353,7 @@ async function refreshData(silent=false){
     try {
         await loadRequests(silent);
         lastRefresh = Date.now();
+        renderTodayBanner();
         if(!silent) toast('Data refreshed','ok');
     } catch(e){
         console.error('Refresh error:', e);
@@ -1299,6 +1367,22 @@ function startAutoRefresh(){
     if(!window._versionCheckStarted){
         window._versionCheckStarted = true;
         setInterval(checkAppVersion, 180000);
+    }
+    // Day-change detector — check every 60s if the date rolled over
+    if(!window._dayChangeStarted){
+        window._dayChangeStarted = true;
+        let _lastDay = new Date().toDateString();
+        setInterval(() => {
+            const today = new Date().toDateString();
+            if(today !== _lastDay){
+                _lastDay = today;
+                console.log('Day changed, refreshing banner & data...');
+                renderTodayBanner();
+                renderCalendar();
+                renderClosedDaysPanel();
+                refreshData(true);
+            }
+        }, 60000);
     }
 }
 
@@ -1317,6 +1401,7 @@ function checkAppVersion(){
 
 document.addEventListener('visibilitychange', async () => {
     if(document.visibilityState === 'visible'){
+        renderTodayBanner();
         const idle = Date.now() - lastRefresh;
         if(idle > 5*60*1000){ token=null; try{await getToken();}catch(e){toast('Session expired','err');setTimeout(()=>location.reload(),1500);return;} }
         if(idle > VISIBILITY_THRESHOLD){ refreshData(true); checkAppVersion(); }
@@ -1346,15 +1431,17 @@ function updateStats(){
     const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && r.Status!=='Completed');
     const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
     const counts = {
+        openAll:     active.length,
         newReq:      active.filter(r => r.Status==='New Request').length,
         pending:     active.filter(r => r.Status.startsWith('Pending')).length,
-        inProgress:  active.filter(r => ['In Review','Processing'].includes(r.Status)).length,
+        inProgress:  active.filter(r => ['In Review','Processing','Customer Replied','Carrier Replied'].includes(r.Status)).length,
         custResp:    active.filter(r => r.HasCustomerResponse).length,
         carrResp:    active.filter(r => r.HasCarrierResponse).length,
         completedWk: requests.filter(r => !r.Archived && r.Status==='Completed' && new Date(r.ModifiedAt)>=weekStart).length,
         unassigned:  active.filter(r => !r.AssignedId).length,
     };
     const cards = [
+        {key:'openAll',   label:'Open Requests',     num:counts.openAll,     color:'teal',   icon:'📋'},
         {key:'newReq',    label:'New Requests',     num:counts.newReq,      color:'red',    icon:'🚨'},
         {key:'custResp',  label:'Customer Replies',  num:counts.custResp,    color:'sky',    icon:'💬'},
         {key:'carrResp',  label:'Carrier Replies',   num:counts.carrResp,    color:'orange', icon:'🏢'},
@@ -1411,7 +1498,7 @@ function renderTabs(){
         if(r.HasCustomerResponse || r.HasCarrierResponse) return false;
         // Always show if pending deadline has expired
         const dl = r.SlaResponseAt ? new Date(r.SlaResponseAt)
-                 : r.ModifiedAt ? addWorkingMinutes(new Date(r.ModifiedAt), 2*8*60) : null;
+                 : r.ModifiedAt ? addWorkingDays(2, new Date(r.ModifiedAt)) : null;
         if(dl && new Date() > dl) return false;
         // Otherwise hide — it's parked pending
         return true;
@@ -1462,7 +1549,7 @@ function applyFilters(){
         // Tab filtering — skip when filtering by calendar day or range (show all matching)
         if(!dayF && !rangeF){
         const pendingDl = isPending ? (r.SlaResponseAt ? new Date(r.SlaResponseAt)
-            : r.ModifiedAt ? addWorkingMinutes(new Date(r.ModifiedAt), 2*8*60) : null) : null;
+            : r.ModifiedAt ? addWorkingDays(2, new Date(r.ModifiedAt)) : null) : null;
         const pendingOverdue = pendingDl && new Date() > pendingDl;
         const pendingVisible = pendingHasResponse || pendingOverdue;
         if(tab==='myCerts'){
@@ -1474,7 +1561,7 @@ function applyFilters(){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(r.Status==='Completed') return false;
-            if(isPending && !pendingVisible && statFilter!=='pending') return false;
+            if(isPending && !pendingVisible && statFilter!=='pending' && statFilter!=='openAll') return false;
         }
         if(tab==='myPending'){
             if(!isPending) return false;
@@ -1491,11 +1578,12 @@ function applyFilters(){
 
         if(statFilter){
             const dl = r.Deadline ? new Date(r.Deadline) : null; if(dl) dl.setHours(0,0,0,0);
+            if(statFilter==='openAll' && (r.Archived || EXIT_STATUSES.includes(r.Status) || r.Status==='Completed')) return false;
             if(statFilter==='newReq' && r.Status!=='New Request') return false;
             if(statFilter==='pastDue' && (!dl||dl>=today||EXIT_STATUSES.includes(r.Status))) return false;
             if(statFilter==='dueToday' && (!dl||dl.getTime()!==today.getTime()||EXIT_STATUSES.includes(r.Status))) return false;
             if(statFilter==='pending' && !r.Status.startsWith('Pending')) return false;
-            if(statFilter==='inProgress' && !['In Review','Processing'].includes(r.Status)) return false;
+            if(statFilter==='inProgress' && !['In Review','Processing','Customer Replied','Carrier Replied'].includes(r.Status)) return false;
             if(statFilter==='custResp' && !r.HasCustomerResponse) return false;
             if(statFilter==='carrResp' && !r.HasCarrierResponse) return false;
             if(statFilter==='completed' && r.Status!=='Completed') return false;
@@ -1765,7 +1853,7 @@ async function setStatus(id, status){
         if(status.startsWith('Pending')){
             fields.HasCustomerResponse = false;
             fields.HasCarrierResponse = false;
-            fields.SlaResponseAt = addWorkingMinutes(new Date(), 2*8*60).toISOString(); // 2 business days
+            fields.SlaResponseAt = addWorkingDays(2).toISOString(); // 2 business days (end of day)
         }
         // When manually setting Customer/Carrier Replied, record timestamp for SLA
         if(REPLIED_STATUSES.includes(status)){
@@ -1785,6 +1873,7 @@ async function setStatus(id, status){
             if(fields.HasCarrierResponse!==undefined) r.HasCarrierResponse=fields.HasCarrierResponse;
             if(fields.SlaResponseAt!==undefined) r.SlaResponseAt=fields.SlaResponseAt;
         }
+        await appendActivityLog(id, 'Status changed to "'+status+'"');
         // Archive Front conversations when Completed
         if(status === 'Completed' && r && CONFIG.frontProxyUrl){
             const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
@@ -2019,6 +2108,21 @@ function openPanel(id){
                 ${(r.policies||[]).length?'<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f1f5f9">📋 <strong>Policies:</strong> '+(r.policies||[]).map(p=>p.num).join(', ')+'</div>':''}
                 <div style="display:flex;gap:8px;align-items:center;padding:4px 0">🆔 <strong>Ref:</strong> ${esc(r.RefId)} · <strong>SP ID:</strong> ${r.id}</div>
                 ${r.FrontConvIds ? '<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;border-top:1px solid #f1f5f9;margin-top:2px">🔗 <div><strong>Front Conv ID(s):</strong><div style="font-family:monospace;font-size:11px;color:#2563eb;margin-top:2px;word-break:break-all">'+r.FrontConvIds.split('|').map(id=>`<div style="cursor:pointer;text-decoration:underline" onclick="openFront('${esc(id.trim())}')" title="Open in Front">${esc(id.trim())}</div>`).join('')+'</div></div></div>' : ''}
+                ${(function(){
+                    const logLines = (r.Notes||'').split('\n').filter(function(l){ return /^\[.+\|.+\]/.test(l); });
+                    if(!logLines.length) return '';
+                    return '<div style="margin-top:10px;border-top:2px solid #e2e8f0;padding-top:8px">'
+                        + '<div style="font-weight:700;color:#374151;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">🕐 Change History</div>'
+                        + logLines.slice().reverse().map(function(l){
+                            const m = l.match(/^\[(.+?)\s*\|\s*(.+?)\]\s*(.+)$/);
+                            if(!m) return '';
+                            const dt=m[1],who=m[2],what=m[3];
+                            const icon = what.toLowerCase().includes('deadline')||what.toLowerCase().includes('extended') ? '📅' : '🔄';
+                            return '<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid #f8fafc">'
+                                +'<span>'+icon+'</span><div><span style="color:#374151;font-weight:600">'+esc(what)+'</span>'
+                                +'<div style="color:#94a3b8;font-size:11px;margin-top:1px">'+esc(dt)+' &middot; '+esc(who)+'</div></div></div>';
+                        }).join('')+'</div>';
+                })()}
             </div>
         </div>
         <div class="section"><h3>Other</h3><div class="field"><label>Archived</label><select id="pArchived"><option value="false"${!r.Archived?' selected':''}>No</option><option value="true"${r.Archived?' selected':''}>Yes</option></select></div></div>
@@ -2159,12 +2263,20 @@ function buildPendingBadge(r){
     // Use SlaResponseAt if set, otherwise estimate from ModifiedAt + 2 business days
     let dl = null;
     if(r.SlaResponseAt) dl = new Date(r.SlaResponseAt);
-    else if(r.ModifiedAt) dl = addWorkingMinutes(new Date(r.ModifiedAt), 2*8*60);
+    else if(r.ModifiedAt) dl = addWorkingDays(2, new Date(r.ModifiedAt));
     const overdue = dl && now > dl;
-    const diffMs = dl ? Math.abs(dl - now) : 0;
-    const diffH = Math.floor(diffMs/3600000);
-    const diffD = Math.floor(diffH/24);
-    const ageLabel = diffD>0 ? diffD+'d' : diffH+'h';
+    // Count working days/hours remaining (not calendar days)
+    let ageLabel = '';
+    if(dl){
+        if(overdue){
+            const wd = countWorkingDays(dl, now);
+            ageLabel = wd > 0 ? wd+'d' : Math.floor(Math.abs(dl-now)/3600000)+'h';
+        } else {
+            const wd = countWorkingDays(now, dl);
+            const diffH = Math.floor((dl-now)/3600000);
+            ageLabel = wd > 0 ? wd+'d' : (diffH > 0 ? diffH+'h' : '<1h');
+        }
+    }
     const badgeStyle = overdue
         ? 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca'
         : 'background:#fef3c7;color:#d97706;border:1px solid #fde68a';
@@ -2210,6 +2322,7 @@ async function saveExtendPending(id){
             { method:'PATCH', body:JSON.stringify({ SlaResponseAt: dl.toISOString() }) });
         const r = requests.find(x=>x.id===id);
         if(r) r.SlaResponseAt = dl.toISOString();
+        await appendActivityLog(id, 'Pending deadline extended to '+dl.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}));
         document.querySelectorAll('.extend-pending-picker').forEach(e=>e.remove());
         toast('Pending deadline extended','ok');
         applyFilters();
