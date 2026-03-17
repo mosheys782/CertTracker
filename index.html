@@ -530,7 +530,7 @@
 // ════════════════════════════════════════════════════════════════════
 //  CONFIG — UPDATE THESE WITH YOUR CREDENTIALS
 // ════════════════════════════════════════════════════════════════════
-const APP_VERSION = 68;
+const APP_VERSION = 71;
 
 const CONFIG = {
     // ── Azure AD / MSAL ──
@@ -1842,6 +1842,7 @@ async function setStatus(id, status){
     document.querySelectorAll('.status-dd').forEach(d=>d.remove());
     try {
         const r = requests.find(x=>x.id===id);
+        if(r) r._prevStatus = r.Status; // capture before change
         // Keep ReopenedFrom unless resolving (Completed, Not Related) or going back to Pending
         const clearReopened = status==='Completed'||status==='Not Related'||status.startsWith('Pending');
         const fields = { Status: status, ReopenedFrom: clearReopened ? '' : (r?.ReopenedFrom||''), LastActivityAt: new Date().toISOString() };
@@ -1874,38 +1875,101 @@ async function setStatus(id, status){
             if(fields.SlaResponseAt!==undefined) r.SlaResponseAt=fields.SlaResponseAt;
         }
         await appendActivityLog(id, 'Status changed to "'+status+'"');
-        // Archive Front conversations when Completed
-        if(status === 'Completed' && r && CONFIG.frontProxyUrl){
+        const CLOSED = ['Completed','Delivered','Not Related'];
+        const prevStatus = r ? r._prevStatus : null;
+        const isReopen = prevStatus && CLOSED.includes(prevStatus) && !CLOSED.includes(status);
+        // Reopen: unarchive Front conversation and re-apply Certificates tag
+        if(isReopen && r && CONFIG.frontProxyUrl){
             const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
             if(convIds.length){
                 try {
-                    await fetch(`${CONFIG.frontProxyUrl}/front-archive`, {
+                    console.log('Front reopen: sending', convIds.length, 'conversation(s):', convIds);
+                    const resp = await fetch(`${CONFIG.frontProxyUrl}/front-reopen`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ conversationIds: convIds })
                     });
-                    toast('Status → '+status+' (Front archived)','ok');
-                } catch(e){ 
-                    console.warn('Front archive failed:', e);
-                    toast('Status → '+status,'ok');
+                    const respText = await resp.text();
+                    if(!resp.ok){
+                        console.error('Front reopen failed:', resp.status, respText);
+                        toast('Status → '+status+' (Front reopen failed: '+resp.status+')','err');
+                    } else {
+                        console.log('Front reopen success:', respText);
+                        toast('Status → '+status+' (Front reopened)','ok');
+                    }
+                } catch(e){
+                    console.error('Front reopen network error:', e);
+                    toast('Status → '+status+' (Front reopen error)','err');
                 }
             } else {
                 toast('Status → '+status,'ok');
             }
-        // Remove Certificates tag and add Frimy when Not Related
-        } else if(status === 'Not Related' && r && CONFIG.frontProxyUrl){
+        // Archive Front conversations when Completed
+        } else if(status === 'Completed' && r && CONFIG.frontProxyUrl){
             const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
             if(convIds.length){
                 try {
-                    await fetch(`${CONFIG.frontProxyUrl}/front-not-related`, {
+                    console.log('Front archive: sending', convIds.length, 'conversation(s):', convIds);
+                    const resp = await fetch(`${CONFIG.frontProxyUrl}/front-archive`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ conversationIds: convIds })
                     });
-                    toast('Status → Not Related (tag removed, Frimy added)','ok');
+                    const respText = await resp.text();
+                    if(!resp.ok){
+                        console.error('Front archive failed:', resp.status, respText);
+                        toast('Status → '+status+' (Front archive failed: '+resp.status+')','err');
+                    } else {
+                        console.log('Front archive success:', respText);
+                        toast('Status → '+status+' (Front archived)','ok');
+                    }
+                } catch(e){ 
+                    console.error('Front archive network error:', e);
+                    toast('Status → '+status+' (Front archive error)','err');
+                }
+            } else {
+                console.warn('Front archive: no FrontConvIds on request', id);
+                toast('Status → '+status,'ok');
+            }
+        // Remove Certificates tag, add Frimy, and archive when Not Related
+        } else if(status === 'Not Related' && r && CONFIG.frontProxyUrl){
+            const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
+            if(convIds.length){
+                try {
+                    console.log('Front not-related: sending', convIds.length, 'conversation(s):', convIds);
+                    const resp = await fetch(`${CONFIG.frontProxyUrl}/front-not-related`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conversationIds: convIds })
+                    });
+                    const respText = await resp.text();
+                    if(!resp.ok){
+                        console.error('Front not-related failed:', resp.status, respText);
+                    } else {
+                        console.log('Front not-related success:', respText);
+                    }
                 } catch(e){
-                    console.warn('Front not-related action failed:', e);
-                    toast('Status → '+status,'ok');
+                    console.error('Front not-related network error:', e);
+                }
+                // Also archive the conversation in Front
+                try {
+                    console.log('Front archive (Not Related): sending', convIds);
+                    const archResp = await fetch(`${CONFIG.frontProxyUrl}/front-archive`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conversationIds: convIds })
+                    });
+                    const archText = await archResp.text();
+                    if(!archResp.ok){
+                        console.error('Front archive failed:', archResp.status, archText);
+                        toast('Status → Not Related (tag removed, archive failed)','err');
+                    } else {
+                        console.log('Front archive success:', archText);
+                        toast('Status → Not Related (tag removed, archived)','ok');
+                    }
+                } catch(e){
+                    console.error('Front archive network error:', e);
+                    toast('Status → Not Related (tag removed, archive error)','err');
                 }
             } else {
                 toast('Status → '+status,'ok');
@@ -2213,8 +2277,82 @@ async function saveRequest(){
     try {
         if(selected){
             // Update existing
+            const prevStatus = selected.Status;
+            const newStatus = fields.Status;
             await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${selected.id}/fields`, { method:'PATCH', body:JSON.stringify(fields) });
-            toast('Request updated!','ok');
+            
+            // Log status change if changed
+            if(prevStatus !== newStatus){
+                await appendActivityLog(selected.id, 'Status changed to "'+newStatus+'"');
+            }
+
+            // Front reopen when moving from closed to active via panel Save
+            const CLOSED = ['Completed','Delivered','Not Related'];
+            const isReopen = CLOSED.includes(prevStatus) && !CLOSED.includes(newStatus);
+            if(isReopen && CONFIG.frontProxyUrl){
+                const convIds = (selected.FrontConvIds||'').split('|').filter(Boolean);
+                if(convIds.length){
+                    try {
+                        console.log('Front reopen (panel save):', convIds);
+                        const resp = await fetch(`${CONFIG.frontProxyUrl}/front-reopen`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ conversationIds: convIds })
+                        });
+                        const respText = await resp.text();
+                        if(!resp.ok) console.error('Front reopen failed:', resp.status, respText);
+                        else console.log('Front reopen success:', respText);
+                        toast('Request updated' + (resp.ok ? ' (Front reopened)' : '') + '!', resp.ok ? 'ok' : 'err');
+                    } catch(e){ console.error('Front reopen error:', e); toast('Request updated!','ok'); }
+                } else { toast('Request updated!','ok'); }
+            // Front archive when completing via panel Save
+            } else if(newStatus === 'Completed' && prevStatus !== 'Completed' && CONFIG.frontProxyUrl){
+                const convIds = (selected.FrontConvIds||'').split('|').filter(Boolean);
+                if(convIds.length){
+                    try {
+                        console.log('Front archive (panel save):', convIds);
+                        const resp = await fetch(`${CONFIG.frontProxyUrl}/front-archive`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ conversationIds: convIds })
+                        });
+                        const respText = await resp.text();
+                        if(!resp.ok) console.error('Front archive failed:', resp.status, respText);
+                        else console.log('Front archive success:', respText);
+                        toast('Request updated' + (resp.ok ? ' (Front archived)' : '') + '!', resp.ok ? 'ok' : 'err');
+                    } catch(e){ console.error('Front archive error:', e); toast('Request updated!','ok'); }
+                } else { toast('Request updated!','ok'); }
+            } else if(newStatus === 'Not Related' && prevStatus !== 'Not Related' && CONFIG.frontProxyUrl){
+                const convIds = (selected.FrontConvIds||'').split('|').filter(Boolean);
+                if(convIds.length){
+                    try {
+                        console.log('Front not-related (panel save):', convIds);
+                        const resp = await fetch(`${CONFIG.frontProxyUrl}/front-not-related`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ conversationIds: convIds })
+                        });
+                        const respText = await resp.text();
+                        if(!resp.ok) console.error('Front not-related failed:', resp.status, respText);
+                        else console.log('Front not-related success:', respText);
+                    } catch(e){ console.error('Front not-related error:', e); }
+                    // Also archive
+                    try {
+                        console.log('Front archive (panel Not Related):', convIds);
+                        const archResp = await fetch(`${CONFIG.frontProxyUrl}/front-archive`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ conversationIds: convIds })
+                        });
+                        const archText = await archResp.text();
+                        if(!archResp.ok) console.error('Front archive failed:', archResp.status, archText);
+                        else console.log('Front archive success:', archText);
+                        toast('Request updated' + (archResp.ok ? ' (Front archived)' : '') + '!', archResp.ok ? 'ok' : 'err');
+                    } catch(e){ console.error('Front archive error:', e); toast('Request updated!','ok'); }
+                } else { toast('Request updated!','ok'); }
+            } else {
+                toast('Request updated!','ok');
+            }
         } else {
             // Generate RefId
             const maxRef = requests.reduce((max,r) => {
