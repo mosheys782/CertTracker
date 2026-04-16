@@ -1285,12 +1285,62 @@ async function loadRequests(silent=false){
             r.conversations = parseConversations(r);
         });
 
+        // ════════════════════════════════════════════════════════════════
+        //  CLIENT-SIDE DEDUPE SAFETY NET
+        //  The Azure Function getListItems() was capped at 500 items,
+        //  which caused the webhook/poll to create duplicate SharePoint
+        //  items for the same Front conversation. This filter hides
+        //  those duplicates from the UI even before server cleanup runs.
+        //  For any conversation that appears in multiple items, we keep
+        //  the one with the lowest CERT-##### RefId (= oldest) and hide
+        //  the rest by marking them locally-archived.
+        //  Will only have effect until dedupe.sh runs in Cloud Shell.
+        // ════════════════════════════════════════════════════════════════
+        const byConvId = new Map();
+        for(const r of requests){
+            const ids = (r.FrontConvIds || '').split('|').filter(Boolean);
+            for(const cid of ids){
+                if(!byConvId.has(cid)) byConvId.set(cid, []);
+                byConvId.get(cid).push(r);
+            }
+        }
+        const hiddenDupeIds = new Set();
+        for(const [cid, group] of byConvId){
+            if(group.length < 2) continue;
+            group.sort((a, b) => {
+                const ra = parseInt((a.RefId||'').match(/CERT-(\d+)/)?.[1] || '999999');
+                const rb = parseInt((b.RefId||'').match(/CERT-(\d+)/)?.[1] || '999999');
+                if(ra !== rb) return ra - rb;
+                return (new Date(a.CreatedAt||0)) - (new Date(b.CreatedAt||0));
+            });
+            // Prefer a keeper that isn't already archived
+            const keeper = group.find(x => !x.Archived) || group[0];
+            for(const x of group){
+                if(x.id !== keeper.id) hiddenDupeIds.add(x.id);
+            }
+        }
+        if(hiddenDupeIds.size > 0){
+            console.warn(`[dedupe safety net] Hiding ${hiddenDupeIds.size} duplicate SharePoint items. ` +
+                `Run dedupe.sh in Cloud Shell to clean them up permanently.`);
+            requests = requests.filter(r => !hiddenDupeIds.has(r.id));
+        }
+
         // Auto-assign unassigned requests to default assignee (Frimy)
+        // SAFETY CAP: when the list had a duplicate explosion, this loop
+        // would fire thousands of PATCH requests per page load and hammer
+        // Graph. Cap at 50 per page load — any more than that, something
+        // is wrong and we shouldn't make it worse by auto-assigning.
         const DEFAULT_ASSIGNEE_EMAIL = 'frimy@gibusa.com';
         const defaultUser = siteUsers.find(u => u.email?.toLowerCase() === DEFAULT_ASSIGNEE_EMAIL.toLowerCase());
         if(defaultUser){
             const unassigned = requests.filter(r => !r.AssignedId && !r.Archived);
-            for(const r of unassigned){
+            const AUTO_ASSIGN_CAP = 50;
+            if(unassigned.length > AUTO_ASSIGN_CAP){
+                console.warn(`[auto-assign] ${unassigned.length} unassigned items — capping at ${AUTO_ASSIGN_CAP} ` +
+                    `this load. If this persists, investigate duplicate creation.`);
+            }
+            const toAssign = unassigned.slice(0, AUTO_ASSIGN_CAP);
+            for(const r of toAssign){
                 try {
                     await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${r.id}/fields`, { method:'PATCH', body:JSON.stringify({AssignedToLookupId: parseInt(defaultUser.id)}) });
                     r.AssignedId = defaultUser.id;
@@ -1299,16 +1349,19 @@ async function loadRequests(silent=false){
                     console.warn('Auto-assign failed for', r.RefId, e.message);
                 }
             }
-            if(unassigned.length > 0) console.log('Auto-assigned', unassigned.length, 'requests to', defaultUser.name);
+            if(toAssign.length > 0) console.log('Auto-assigned', toAssign.length, 'requests to', defaultUser.name);
         }
 
-        console.log('Loaded', requests.length, 'cert requests');
+        console.log('Loaded', requests.length, 'cert requests' + (hiddenDupeIds.size ? ` (${hiddenDupeIds.size} duplicates hidden)` : ''));
 
         // Auto-move pending items to Customer/Carrier Replied if a reply was detected
+        // SAFETY CAP: same reasoning as auto-assign — if somehow thousands of items
+        // show as replied, don't fire thousands of PATCH calls on page load.
         const pendingWithReply = requests.filter(r =>
             r.Status.startsWith('Pending') && (r.HasCustomerResponse || r.HasCarrierResponse)
         );
-        for(const r of pendingWithReply){
+        const AUTO_MOVE_CAP = 50;
+        for(const r of pendingWithReply.slice(0, AUTO_MOVE_CAP)){
             const newStatus = r.HasCustomerResponse ? 'Customer Replied' : 'Carrier Replied';
             try {
                 await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${r.id}/fields`,
@@ -1317,6 +1370,9 @@ async function loadRequests(silent=false){
                 r.LastActivityAt = new Date().toISOString();
                 console.log(`Auto-moved ${r.RefId} from Pending → ${newStatus}`);
             } catch(e){ console.warn('Failed to auto-move', r.RefId, e); }
+        }
+        if(pendingWithReply.length > AUTO_MOVE_CAP){
+            console.warn(`[auto-move] ${pendingWithReply.length} pending-with-reply items — only moved first ${AUTO_MOVE_CAP}.`);
         }
 
         buildAssigneeFilter();
