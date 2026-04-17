@@ -554,11 +554,12 @@ const CONFIG = {
 // ════════════════════════════════════════════════════════════════════
 //  CONSTANTS
 // ════════════════════════════════════════════════════════════════════
-const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied','Completed','Not Related'];
-const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#0891b2','Processing':'#ea580c','Customer Replied':'#0284c7','Carrier Replied':'#f97316','Completed':'#16a34a','Delivered':'#059669','Not Related':'#94a3b8'};
+const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied','Completed','Completed - Front','Not Related'];
+const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#0891b2','Processing':'#ea580c','Customer Replied':'#0284c7','Carrier Replied':'#f97316','Completed':'#16a34a','Completed - Front':'#15803d','Delivered':'#059669','Not Related':'#94a3b8'};
 const EXIT_STATUSES = ['Delivered','Not Related'];
 const ACTIVE_STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied'];
-const DONE_STATUSES = ['Completed','Delivered'];
+const DONE_STATUSES = ['Completed','Completed - Front','Delivered'];
+const COMPLETED_STATUSES = ['Completed','Completed - Front'];
 const REPLIED_STATUSES = ['Customer Replied','Carrier Replied'];
 
 
@@ -841,7 +842,7 @@ async function resetPendingDeadlines(){
 function getSlaInfo(r){
     const now=new Date();
     const open=r.EmailReceivedAt?new Date(r.EmailReceivedAt):(r.CreatedAt?new Date(r.CreatedAt):null);
-    const isActive=!r.Archived&&!EXIT_STATUSES.includes(r.Status)&&r.Status!=='Completed';
+    const isActive=!r.Archived&&!EXIT_STATUSES.includes(r.Status)&&!COMPLETED_STATUSES.includes(r.Status);
     const res={newReq:null,response:null,resolution:null};
     // SLA 1: New Request — 1 working hour while status is New Request
     if(open&&r.Status==='New Request'){
@@ -1201,6 +1202,21 @@ async function ensureColumnsExist(){
                 } catch(e){ console.warn('Could not add column', col.name, e.message); }
             }
         }
+        // Ensure Status choice column has all current STATUSES values (for added statuses like 'Completed - Front')
+        try {
+            const statusCol = existing.value.find(c => c.name === 'Status');
+            if(statusCol && statusCol.choice){
+                const current = statusCol.choice.choices || [];
+                const missing = STATUSES.filter(s => !current.includes(s));
+                if(missing.length){
+                    await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns/${statusCol.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ choice: { choices: [...current, ...missing] } })
+                    });
+                    console.log('Status column: added missing choices:', missing);
+                }
+            }
+        } catch(e){ console.warn('Status choice migration failed:', e.message); }
     } catch(e){ console.warn('Column migration check failed:', e.message); }
 }
 
@@ -1484,7 +1500,7 @@ function changePageSize(size){
 // ════════════════════════════════════════════════════════════════════
 function updateStats(){
     const today = new Date(); today.setHours(0,0,0,0);
-    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && r.Status!=='Completed');
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status));
     const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
     const counts = {
         openAll:     active.length,
@@ -1493,7 +1509,7 @@ function updateStats(){
         inProgress:  active.filter(r => ['In Review','Processing','Customer Replied','Carrier Replied'].includes(r.Status)).length,
         custResp:    active.filter(r => r.HasCustomerResponse).length,
         carrResp:    active.filter(r => r.HasCarrierResponse).length,
-        completedWk: requests.filter(r => !r.Archived && r.Status==='Completed' && new Date(r.ModifiedAt)>=weekStart).length,
+        completedWk: requests.filter(r => !r.Archived && COMPLETED_STATUSES.includes(r.Status) && new Date(r.ModifiedAt)>=weekStart).length,
         unassigned:  active.filter(r => !r.AssignedId).length,
     };
     const cards = [
@@ -1516,13 +1532,13 @@ function updateStats(){
 
     // ── SLA Banner ──
     // Avg turnaround (completed items with both EmailReceivedAt and ModifiedAt)
-    const completedToday = requests.filter(r=>r.Status==='Completed'&&!r.Archived&&new Date(r.ModifiedAt)>=today);
+    const completedToday = requests.filter(r=>COMPLETED_STATUSES.includes(r.Status)&&!r.Archived&&new Date(r.ModifiedAt)>=today);
     const completedWeek = requests.filter(r=>{
-        if(r.Status!=='Completed'||r.Archived) return false;
+        if(!COMPLETED_STATUSES.includes(r.Status)||r.Archived) return false;
         const d=new Date(r.ModifiedAt); const wStart=new Date(today); wStart.setDate(today.getDate()-today.getDay());
         return d>=wStart;
     });
-    const turnarounds = requests.filter(r=>r.Status==='Completed'&&r.EmailReceivedAt&&r.ModifiedAt)
+    const turnarounds = requests.filter(r=>COMPLETED_STATUSES.includes(r.Status)&&r.EmailReceivedAt&&r.ModifiedAt)
         .map(r=>(new Date(r.ModifiedAt)-new Date(r.EmailReceivedAt))/3600000).filter(h=>h>0&&h<720);
     const avgH = turnarounds.length ? Math.round(turnarounds.reduce((a,b)=>a+b,0)/turnarounds.length) : null;
     document.getElementById('slaAvg').textContent = avgH ? (avgH<24?avgH+'h':Math.round(avgH/24)+'d') : '—';
@@ -1530,7 +1546,7 @@ function updateStats(){
 
     // New Request SLA counts
     let nrOk=0, nrBreach=0, respOk=0, respBreach=0, resOk=0, resBreach=0;
-    requests.filter(r=>!r.Archived&&!EXIT_STATUSES.includes(r.Status)&&r.Status!=='Completed').forEach(r=>{
+    requests.filter(r=>!r.Archived&&!EXIT_STATUSES.includes(r.Status)&&!COMPLETED_STATUSES.includes(r.Status)).forEach(r=>{
         const s=getSlaInfo(r);
         if(s.newReq){ s.newReq.breached?nrBreach++:nrOk++; }
         if(s.response){ s.response.breached?respBreach++:respOk++; }
@@ -1566,7 +1582,7 @@ function renderTabs(){
         {key:'myCerts', label:'📜 My Requests', count:active.filter(r=>r.AssignedId===currentUserId).length},
         {key:'allCerts', label:'📋 All Requests', count:active.length},
         {key:'myPending', label:'⏳ My Pending', count:myPending.length},
-        {key:'completed', label:'✅ Completed', count:requests.filter(r=>r.Status==='Completed'&&!r.Archived).length},
+        {key:'completed', label:'✅ Completed', count:requests.filter(r=>COMPLETED_STATUSES.includes(r.Status)&&!r.Archived).length},
         {key:'archived', label:'📁 Archived', count:requests.filter(r=>r.Archived).length},
     ];
     document.getElementById('tabRow').innerHTML = tabs.map(t =>
@@ -1616,7 +1632,7 @@ function applyFilters(){
         if(tab==='allCerts'){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
-            if(r.Status==='Completed') return false;
+            if(COMPLETED_STATUSES.includes(r.Status)) return false;
             if(isPending && !pendingVisible && statFilter!=='pending' && statFilter!=='openAll') return false;
         }
         if(tab==='myPending'){
@@ -1624,7 +1640,7 @@ function applyFilters(){
             if(r.Archived) return false;
         }
         if(tab==='completed'){
-            if(r.Status!=='Completed') return false;
+            if(!COMPLETED_STATUSES.includes(r.Status)) return false;
             if(r.Archived) return false;
         }
         if(tab==='archived'){
@@ -1634,7 +1650,7 @@ function applyFilters(){
 
         if(statFilter){
             const dl = r.Deadline ? new Date(r.Deadline) : null; if(dl) dl.setHours(0,0,0,0);
-            if(statFilter==='openAll' && (r.Archived || EXIT_STATUSES.includes(r.Status) || r.Status==='Completed')) return false;
+            if(statFilter==='openAll' && (r.Archived || EXIT_STATUSES.includes(r.Status) || COMPLETED_STATUSES.includes(r.Status))) return false;
             if(statFilter==='newReq' && r.Status!=='New Request') return false;
             if(statFilter==='pastDue' && (!dl||dl>=today||EXIT_STATUSES.includes(r.Status))) return false;
             if(statFilter==='dueToday' && (!dl||dl.getTime()!==today.getTime()||EXIT_STATUSES.includes(r.Status))) return false;
@@ -1642,9 +1658,9 @@ function applyFilters(){
             if(statFilter==='inProgress' && !['In Review','Processing','Customer Replied','Carrier Replied'].includes(r.Status)) return false;
             if(statFilter==='custResp' && !r.HasCustomerResponse) return false;
             if(statFilter==='carrResp' && !r.HasCarrierResponse) return false;
-            if(statFilter==='completed' && r.Status!=='Completed') return false;
+            if(statFilter==='completed' && !COMPLETED_STATUSES.includes(r.Status)) return false;
             if(statFilter==='completedWk'){
-                if(r.Status!=='Completed') return false;
+                if(!COMPLETED_STATUSES.includes(r.Status)) return false;
                 const wStart=new Date(today); wStart.setDate(today.getDate()-today.getDay());
                 if(new Date(r.ModifiedAt)<wStart) return false;
             }
@@ -1931,7 +1947,7 @@ async function setStatus(id, status){
             if(fields.SlaResponseAt!==undefined) r.SlaResponseAt=fields.SlaResponseAt;
         }
         await appendActivityLog(id, 'Status changed to "'+status+'"');
-        const CLOSED = ['Completed','Delivered','Not Related'];
+        const CLOSED = ['Completed','Completed - Front','Delivered','Not Related'];
         const prevStatus = r ? r._prevStatus : null;
         const isReopen = prevStatus && CLOSED.includes(prevStatus) && !CLOSED.includes(status);
         // Reopen: unarchive Front conversation and re-apply Certificates tag
@@ -1960,8 +1976,8 @@ async function setStatus(id, status){
             } else {
                 toast('Status → '+status,'ok');
             }
-        // Archive Front conversations when Completed
-        } else if(status === 'Completed' && r && CONFIG.frontProxyUrl){
+        // Archive Front conversations when Completed (or Completed - Front)
+        } else if((status === 'Completed' || status === 'Completed - Front') && r && CONFIG.frontProxyUrl){
             const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
             if(convIds.length){
                 try {
@@ -2343,7 +2359,7 @@ async function saveRequest(){
             }
 
             // Front reopen when moving from closed to active via panel Save
-            const CLOSED = ['Completed','Delivered','Not Related'];
+            const CLOSED = ['Completed','Completed - Front','Delivered','Not Related'];
             const isReopen = CLOSED.includes(prevStatus) && !CLOSED.includes(newStatus);
             if(isReopen && CONFIG.frontProxyUrl){
                 const convIds = (selected.FrontConvIds||'').split('|').filter(Boolean);
@@ -2362,7 +2378,7 @@ async function saveRequest(){
                     } catch(e){ console.error('Front reopen error:', e); toast('Request updated!','ok'); }
                 } else { toast('Request updated!','ok'); }
             // Front archive when completing via panel Save
-            } else if(newStatus === 'Completed' && prevStatus !== 'Completed' && CONFIG.frontProxyUrl){
+            } else if((newStatus === 'Completed' || newStatus === 'Completed - Front') && !['Completed','Completed - Front'].includes(prevStatus) && CONFIG.frontProxyUrl){
                 const convIds = (selected.FrontConvIds||'').split('|').filter(Boolean);
                 if(convIds.length){
                     try {
@@ -3305,7 +3321,7 @@ function renderCalendar(){
     requests.forEach(r=>{
         const dt = r.EmailReceivedAt || r.CreatedAt;
         if(dt){ const iso=dt.slice(0,10); dayCounts[iso]=(dayCounts[iso]||0)+1; }
-        if(r.Status==='Completed' && r.ModifiedAt){
+        if(COMPLETED_STATUSES.includes(r.Status) && r.ModifiedAt){
             const iso=r.ModifiedAt.slice(0,10); dayCompleted[iso]=(dayCompleted[iso]||0)+1;
         }
     });
