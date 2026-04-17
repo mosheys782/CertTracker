@@ -150,6 +150,40 @@
         .filter-tag .remove{cursor:pointer;color:#64748b;font-weight:bold}
         .filter-tag .remove:hover{color:#dc2626}
 
+        /* ═══ BULK SELECTION ═══ */
+        .bulk-toolbar{display:none;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;padding:12px 20px;border-radius:12px;margin:8px 0;box-shadow:0 2px 8px rgba(59,130,246,0.3);align-items:center;gap:12px;position:sticky;top:0;z-index:50;flex-wrap:wrap}
+        .bulk-toolbar.visible{display:flex}
+        .bulk-toolbar .sel-count{font-weight:700;font-size:15px;white-space:nowrap}
+        .bulk-toolbar .bulk-actions{display:flex;gap:8px;flex:1;flex-wrap:wrap}
+        .bulk-btn{background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+        .bulk-btn:hover:not(:disabled){background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.6)}
+        .bulk-btn:disabled{opacity:0.45;cursor:not-allowed}
+        .bulk-btn.bulk-clear{background:rgba(0,0,0,0.2)}
+        .bulk-btn.bulk-danger:hover:not(:disabled){background:#dc2626;border-color:#dc2626}
+        .row-cb{width:16px;height:16px;cursor:pointer;accent-color:#2563eb;margin:0}
+        .grid-table th.cb-col,.grid-table td.cb-col{width:40px;text-align:center;padding:8px 0 8px 14px}
+        tr.row-selected>td{background:#eff6ff!important}
+        /* Bulk modals */
+        .bulk-modal-bg{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.55);z-index:2000;align-items:center;justify-content:center;padding:20px}
+        .bulk-modal-bg.visible{display:flex}
+        .bulk-modal{background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.3);max-width:620px;width:100%;max-height:85vh;display:flex;flex-direction:column}
+        .bulk-modal-header{padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between}
+        .bulk-modal-header h3{margin:0;font-size:17px;color:#0f172a;font-weight:700}
+        .bulk-modal-body{padding:18px 24px;overflow-y:auto;flex:1}
+        .bulk-modal-footer{padding:14px 24px;border-top:1px solid #e2e8f0;display:flex;gap:10px;justify-content:flex-end;background:#f8fafc;border-radius:0 0 16px 16px}
+        .bulk-modal-close{cursor:pointer;color:#64748b;font-size:24px;line-height:1;background:none;border:none;padding:0;width:30px;height:30px}
+        .bulk-modal-close:hover{color:#0f172a}
+        .bulk-merge-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;font-size:13px}
+        .bulk-merge-row.keeper{border-color:#16a34a;background:#f0fdf4}
+        .bulk-merge-row.archivee{border-color:#fca5a5;background:#fef2f2}
+        .bulk-merge-badge{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
+        .bulk-progress{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-top:10px}
+        .bulk-progress-bar{height:100%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);transition:width 0.3s;width:0%}
+        .bulk-opt{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;cursor:pointer;margin-bottom:4px;transition:background 0.15s}
+        .bulk-opt:hover{background:#f1f5f9}
+        .bulk-opt .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+        .bulk-opt .avatar{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;flex-shrink:0}
+
         /* ═══ TABLE ═══ */
         .grid{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden}
         .grid-table{width:100%;border-collapse:collapse}
@@ -507,11 +541,61 @@
             <div class="active-filters" id="activeFilters"></div>
         </div>
 
+        <!-- Bulk Actions Toolbar -->
+        <div class="bulk-toolbar" id="bulkToolbar">
+            <span class="sel-count"><span id="bulkSelCount">0</span> selected</span>
+            <div class="bulk-actions">
+                <button class="bulk-btn" id="bulkMergeBtn" onclick="openBulkMergeModal()" disabled title="Select 2 or more to merge">🔀 Merge Duplicates</button>
+                <button class="bulk-btn" onclick="openBulkAssignModal()">👤 Assign</button>
+                <button class="bulk-btn" onclick="openBulkStatusModal()">🏷️ Change Status</button>
+                <button class="bulk-btn bulk-danger" onclick="confirmBulkNotRelated()">🚫 Mark Not Related</button>
+            </div>
+            <button class="bulk-btn bulk-clear" onclick="clearBulkSelection()">Clear</button>
+        </div>
+
+        <!-- Bulk Modals -->
+        <div class="bulk-modal-bg" id="bulkMergeModal" onclick="if(event.target===this)closeBulkModal('bulkMergeModal')">
+            <div class="bulk-modal">
+                <div class="bulk-modal-header"><h3>🔀 Merge Duplicates</h3><button class="bulk-modal-close" onclick="closeBulkModal('bulkMergeModal')">×</button></div>
+                <div class="bulk-modal-body" id="bulkMergeBody"></div>
+                <div class="bulk-modal-footer"><button class="btn btn-cancel" onclick="closeBulkModal('bulkMergeModal')">Cancel</button><button class="btn btn-save" id="bulkMergeConfirmBtn" onclick="runBulkMerge()">Confirm Merge</button></div>
+            </div>
+        </div>
+
+        <div class="bulk-modal-bg" id="bulkAssignModal" onclick="if(event.target===this)closeBulkModal('bulkAssignModal')">
+            <div class="bulk-modal">
+                <div class="bulk-modal-header"><h3>👤 Assign Selected</h3><button class="bulk-modal-close" onclick="closeBulkModal('bulkAssignModal')">×</button></div>
+                <div class="bulk-modal-body">
+                    <input type="text" id="bulkAssignSearch" placeholder="Search users..." style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:12px;font-size:13px" oninput="filterBulkAssignees()">
+                    <div id="bulkAssignList"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bulk-modal-bg" id="bulkStatusModal" onclick="if(event.target===this)closeBulkModal('bulkStatusModal')">
+            <div class="bulk-modal">
+                <div class="bulk-modal-header"><h3>🏷️ Change Status</h3><button class="bulk-modal-close" onclick="closeBulkModal('bulkStatusModal')">×</button></div>
+                <div class="bulk-modal-body" id="bulkStatusBody"></div>
+            </div>
+        </div>
+
+        <div class="bulk-modal-bg" id="bulkProgressModal">
+            <div class="bulk-modal">
+                <div class="bulk-modal-header"><h3 id="bulkProgressTitle">Processing...</h3></div>
+                <div class="bulk-modal-body">
+                    <div id="bulkProgressStatus" style="font-size:14px;color:#475569;margin-bottom:10px">Starting...</div>
+                    <div class="bulk-progress"><div class="bulk-progress-bar" id="bulkProgressBar"></div></div>
+                    <div id="bulkProgressDetails" style="margin-top:14px;font-size:12px;color:#64748b;max-height:220px;overflow-y:auto;font-family:monospace;white-space:pre-wrap"></div>
+                </div>
+                <div class="bulk-modal-footer"><button class="btn btn-save" id="bulkProgressDone" onclick="bulkProgressFinish()" style="display:none">Done</button></div>
+            </div>
+        </div>
+
         <!-- Grid -->
         <div class="grid" id="gridContainer">
             <table class="grid-table"><thead><tr>
-                <th style="min-width:250px">REQUEST</th><th>POLICY</th><th>SUBJECT</th><th style="text-align:center">DEADLINE</th><th style="text-align:center">STATUS</th><th style="text-align:center">ASSIGNED</th><th style="text-align:center;min-width:160px">AGE</th><th style="text-align:center;width:80px"></th>
-            </tr></thead><tbody id="gridBody"><tr><td colspan="8" class="loading"><div class="spinner"></div>Loading requests...</td></tr></tbody></table>
+                <th class="cb-col"><input type="checkbox" class="row-cb" id="bulkSelectAllCb" onclick="toggleBulkSelectAll(this)" title="Select all on this page"></th><th style="min-width:250px">REQUEST</th><th>POLICY</th><th>SUBJECT</th><th style="text-align:center">DEADLINE</th><th style="text-align:center">STATUS</th><th style="text-align:center">ASSIGNED</th><th style="text-align:center;min-width:160px">AGE</th><th style="text-align:center;width:80px"></th>
+            </tr></thead><tbody id="gridBody"><tr><td colspan="9" class="loading"><div class="spinner"></div>Loading requests...</td></tr></tbody></table>
             <div class="pagination" id="pagination" style="display:none">
                 <div class="pagination-left"><div id="pageInfo"></div><div class="page-size-select">Show <select id="pageSize" onchange="changePageSize(this.value)"><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select> per page</div></div>
                 <div id="pageBtns"></div>
@@ -1236,7 +1320,7 @@ async function loadSiteUsers(){
 }
 
 async function loadRequests(silent=false){
-    if(!silent) document.getElementById('gridBody').innerHTML = '<tr><td colspan="8" class="loading"><div class="spinner"></div>Loading requests...</td></tr>';
+    if(!silent) document.getElementById('gridBody').innerHTML = '<tr><td colspan="9" class="loading"><div class="spinner"></div>Loading requests...</td></tr>';
     try {
         requests = [];
         let url = `/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items?$expand=fields&$select=id,createdDateTime,lastModifiedDateTime,createdBy,lastModifiedBy,fields&$top=999`;
@@ -1395,7 +1479,7 @@ async function loadRequests(silent=false){
         renderAll();
     } catch(e){
         console.error('Load error:', e);
-        document.getElementById('gridBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:60px;color:#dc2626">Error loading requests. Check console.</td></tr>';
+        document.getElementById('gridBody').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:60px;color:#dc2626">Error loading requests. Check console.</td></tr>';
     }
 }
 
@@ -1500,7 +1584,7 @@ function changePageSize(size){
 // ════════════════════════════════════════════════════════════════════
 function updateStats(){
     const today = new Date(); today.setHours(0,0,0,0);
-    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status));
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !r.Status.startsWith("Pending"));
     const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
     const counts = {
         openAll:     active.length,
@@ -1564,26 +1648,17 @@ function updateStats(){
 // ════════════════════════════════════════════════════════════════════
 function renderTabs(){
     const now = new Date();
-    const isPendingHidden = r => {
-        if(!r.Status.startsWith('Pending')) return false;
-        // Always show if customer/carrier replied
-        if(r.HasCustomerResponse || r.HasCarrierResponse) return false;
-        // Always show if pending deadline has expired
-        const dl = r.SlaResponseAt ? new Date(r.SlaResponseAt)
-                 : r.ModifiedAt ? addWorkingDays(2, new Date(r.ModifiedAt)) : null;
-        if(dl && new Date() > dl) return false;
-        // Otherwise hide — it's parked pending
-        return true;
-    };
-    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !isPendingHidden(r));
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !r.Status.startsWith("Pending"));
     const myPending = requests.filter(r => !r.Archived && r.Status.startsWith('Pending') && r.AssignedId===currentUserId);
     const allPending = requests.filter(r => !r.Archived && r.Status.startsWith('Pending'));
     const tabs = [
         {key:'myCerts', label:'📜 My Requests', count:active.filter(r=>r.AssignedId===currentUserId).length},
-        {key:'allCerts', label:'📋 All Requests', count:active.length},
+        {key:'allCerts', label:'📋 All Open Requests', count:active.length},
+        {key:'allPending', label:'⏳ All Pending', count:allPending.length},
         {key:'myPending', label:'⏳ My Pending', count:myPending.length},
         {key:'completed', label:'✅ Completed', count:requests.filter(r=>COMPLETED_STATUSES.includes(r.Status)&&!r.Archived).length},
         {key:'archived', label:'📁 Archived', count:requests.filter(r=>r.Archived).length},
+        {key:'all', label:'🗂️ All Requests', count:requests.length},
     ];
     document.getElementById('tabRow').innerHTML = tabs.map(t =>
         `<div class="tab${tab===t.key?' active':''}" onclick="switchTab('${t.key}')">${t.label}<span class="count">${t.count}</span></div>`
@@ -1594,6 +1669,7 @@ function toggleStatFilter(key){
     statFilter = statFilter===key?null:key; 
     if(statFilter==='completedWk') tab='completed';
     else if(statFilter==='completed') tab='completed';
+    else if(statFilter==='pending') tab='allPending';
     else if(statFilter) tab='allCerts'; 
     page=1; renderTabs(); applyFilters(); updateStats(); 
 }
@@ -1616,24 +1692,25 @@ function applyFilters(){
 
     filtered = requests.filter(r => {
         const isPending = r.Status.startsWith('Pending');
-        const pendingHasResponse = isPending && (r.HasCustomerResponse || r.HasCarrierResponse);
 
         // Tab filtering — skip when filtering by calendar day or range (show all matching)
         if(!dayF && !rangeF){
-        const pendingDl = isPending ? (r.SlaResponseAt ? new Date(r.SlaResponseAt)
-            : r.ModifiedAt ? addWorkingDays(2, new Date(r.ModifiedAt)) : null) : null;
-        const pendingOverdue = pendingDl && new Date() > pendingDl;
-        const pendingVisible = pendingHasResponse || pendingOverdue;
         if(tab==='myCerts'){
             if(r.AssignedId!==currentUserId) return false;
             if(r.Archived) return false;
-            if(isPending && !pendingVisible) return false;
+            if(EXIT_STATUSES.includes(r.Status)) return false;
+            if(COMPLETED_STATUSES.includes(r.Status)) return false;
+            if(isPending) return false;
         }
         if(tab==='allCerts'){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(COMPLETED_STATUSES.includes(r.Status)) return false;
-            if(isPending && !pendingVisible && statFilter!=='pending' && statFilter!=='openAll') return false;
+            if(isPending) return false;
+        }
+        if(tab==='allPending'){
+            if(r.Archived) return false;
+            if(!isPending) return false;
         }
         if(tab==='myPending'){
             if(!isPending) return false;
@@ -1646,6 +1723,7 @@ function applyFilters(){
         if(tab==='archived'){
             if(!r.Archived) return false;
         }
+        // 'all' tab: show everything (no filtering)
         } // end !dayF
 
         if(statFilter){
@@ -1795,7 +1873,7 @@ function renderTable(){
     const total=filtered.length, pages=Math.ceil(total/PAGE_SIZE);
     const start=(page-1)*PAGE_SIZE, items=filtered.slice(start,start+PAGE_SIZE);
 
-    if(!items.length){ body.innerHTML='<tr><td colspan="8" style="text-align:center;padding:60px;color:#6b7280">No requests found</td></tr>'; document.getElementById('pagination').style.display='none'; return; }
+    if(!items.length){ body.innerHTML='<tr><td colspan="9" style="text-align:center;padding:60px;color:#6b7280">No requests found</td></tr>'; document.getElementById('pagination').style.display='none'; return; }
 
     body.innerHTML = items.map(r => {
         const ts = TYPE_STYLES[r.RequestType]||{cls:'cert',icon:'📜'};
@@ -1830,7 +1908,8 @@ function renderTable(){
             notifHtml+='</div>';
         }
 
-        return `<tr${r.Status==='Not Related'?' style="opacity:0.5"':''}>
+        return `<tr class="${selectedIds.has(r.id)?'row-selected':''}"${r.Status==='Not Related'?' style="opacity:0.5"':''}>
+            <td class="cb-col" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" ${selectedIds.has(r.id)?'checked':''} onclick="toggleBulkRow('${r.id}',this.checked)"></td>
             <td style="cursor:pointer;position:relative" onclick="event.stopPropagation();openInlineCustomerSearch('${r.id}',this)"><div class="req-cell">
                 <div class="req-icon" style="background:${color}15;color:${color}">${ts.icon}</div>
                 <div class="req-info">
@@ -1882,6 +1961,9 @@ function renderTable(){
         </tr>`;
     }).join('');
 
+    // Refresh bulk toolbar state (header select-all, count)
+    if(typeof updateBulkToolbar === 'function') updateBulkToolbar();
+
     // Pagination
     const pag=document.getElementById('pagination');
     if(total>PAGE_SIZE){
@@ -1908,6 +1990,253 @@ function openStatusDD(id, el){
     dd.style.left=rect.left+'px';
     dd.innerHTML=STATUSES.map(s=>`<div class="status-opt" onclick="event.stopPropagation();setStatus('${id}','${s.replace(/'/g,"\\'")}')"><div class="status-dot" style="background:${STATUS_COLORS[s]}"></div>${s}</div>`).join('');
     document.body.appendChild(dd);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  BULK SELECTION + BULK ACTIONS
+// ════════════════════════════════════════════════════════════════════
+const selectedIds = new Set();
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+
+function toggleBulkRow(id, checked){
+    if(checked) selectedIds.add(id); else selectedIds.delete(id);
+    const tr = document.querySelector(`input.row-cb[onclick*="'${id}'"]`)?.closest('tr');
+    if(tr) tr.classList.toggle('row-selected', checked);
+    updateBulkToolbar();
+}
+
+function toggleBulkSelectAll(cb){
+    // Select all rows currently visible in the tbody
+    document.querySelectorAll('#gridBody tr input.row-cb').forEach(box=>{
+        const oc = box.getAttribute('onclick') || '';
+        const m = oc.match(/'([^']+)'/);
+        if(!m) return;
+        box.checked = cb.checked;
+        const tr = box.closest('tr');
+        if(cb.checked){ selectedIds.add(m[1]); tr && tr.classList.add('row-selected'); }
+        else         { selectedIds.delete(m[1]); tr && tr.classList.remove('row-selected'); }
+    });
+    updateBulkToolbar();
+}
+
+function clearBulkSelection(){
+    selectedIds.clear();
+    document.querySelectorAll('#gridBody tr input.row-cb').forEach(b=>b.checked=false);
+    document.querySelectorAll('#gridBody tr.row-selected').forEach(t=>t.classList.remove('row-selected'));
+    const sa = document.getElementById('bulkSelectAllCb'); if(sa){ sa.checked = false; sa.indeterminate = false; }
+    updateBulkToolbar();
+}
+
+function updateBulkToolbar(){
+    const tb = document.getElementById('bulkToolbar');
+    if(!tb) return;
+    const cnt = selectedIds.size;
+    document.getElementById('bulkSelCount').textContent = cnt;
+    tb.classList.toggle('visible', cnt > 0);
+    const mergeBtn = document.getElementById('bulkMergeBtn');
+    if(mergeBtn){
+        mergeBtn.disabled = cnt < 2;
+        mergeBtn.title = cnt < 2 ? 'Select 2 or more to merge' : `Merge ${cnt} items into one`;
+    }
+    // Sync header select-all checkbox state
+    const visibleRows = document.querySelectorAll('#gridBody tr input.row-cb');
+    const sa = document.getElementById('bulkSelectAllCb');
+    if(sa && visibleRows.length){
+        const allChecked = Array.from(visibleRows).every(b => b.checked);
+        const someChecked = Array.from(visibleRows).some(b => b.checked);
+        sa.checked = allChecked;
+        sa.indeterminate = !allChecked && someChecked;
+    } else if(sa){
+        sa.checked = false; sa.indeterminate = false;
+    }
+}
+
+function getSelectedRequests(){
+    return Array.from(selectedIds).map(id => requests.find(r => r.id === id)).filter(Boolean);
+}
+
+function closeBulkModal(mid){ document.getElementById(mid).classList.remove('visible'); }
+
+// ─── MERGE ────────────────────────────────────────────────────
+function openBulkMergeModal(){
+    const items = getSelectedRequests();
+    if(items.length < 2){ toast('Select 2+ items to merge','err'); return; }
+    items.sort((a,b) => {
+        const na = parseInt(String(a.RefId||'').match(/CERT-(\d+)/)?.[1] || '999999');
+        const nb = parseInt(String(b.RefId||'').match(/CERT-(\d+)/)?.[1] || '999999');
+        return na - nb;
+    });
+    const keeper = items[0];
+    const archivees = items.slice(1);
+    const keeperConvs = new Set((keeper.FrontConvIds||'').split('|').filter(Boolean));
+    const addConvs = new Set();
+    archivees.forEach(a => (a.FrontConvIds||'').split('|').filter(Boolean).forEach(c => { if(!keeperConvs.has(c)) addConvs.add(c); }));
+    const body = document.getElementById('bulkMergeBody');
+    body.innerHTML = `
+        <p style="margin:0 0 12px;font-size:13px;color:#475569">This will keep the oldest item, consolidate all Front conversations onto it, and archive the others as <b>Not Related</b>.</p>
+        <div class="bulk-merge-row keeper">
+            <span class="bulk-merge-badge" style="background:#16a34a;color:#fff">Keep</span>
+            <div style="flex:1"><b>${esc(keeper.RefId||'')}</b> — ${esc(keeper.CustomerName||keeper.CustomerEmail||'(no customer)')} — <span style="color:#64748b">${esc(keeper.Status||'')}</span></div>
+        </div>
+        ${archivees.map(a => `
+            <div class="bulk-merge-row archivee">
+                <span class="bulk-merge-badge" style="background:#dc2626;color:#fff">Archive</span>
+                <div style="flex:1"><b>${esc(a.RefId||'')}</b> — ${esc(a.CustomerName||a.CustomerEmail||'(no customer)')} — <span style="color:#64748b">${esc(a.Status||'')}</span></div>
+            </div>
+        `).join('')}
+        <div style="margin-top:14px;padding:10px 12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#475569;line-height:1.6">
+            <b>Result on ${esc(keeper.RefId||'')}:</b><br>
+            • ${keeperConvs.size + addConvs.size} total Front conversation${(keeperConvs.size + addConvs.size)===1?'':'s'} (${keeperConvs.size} existing + ${addConvs.size} added)<br>
+            • Front tags are <b>preserved</b> — all conversations stay accessible in Front<br>
+            • If a customer replies on any linked conversation, it'll reopen ${esc(keeper.RefId||'')}
+        </div>
+    `;
+    document.getElementById('bulkMergeModal').classList.add('visible');
+}
+
+async function runBulkMerge(){
+    closeBulkModal('bulkMergeModal');
+    const items = getSelectedRequests();
+    if(items.length < 2) return;
+    items.sort((a,b) => {
+        const na = parseInt(String(a.RefId||'').match(/CERT-(\d+)/)?.[1] || '999999');
+        const nb = parseInt(String(b.RefId||'').match(/CERT-(\d+)/)?.[1] || '999999');
+        return na - nb;
+    });
+    const keeper = items[0];
+    const archivees = items.slice(1);
+    bulkProgressOpen('Merging '+archivees.length+' into '+(keeper.RefId||''));
+    const keeperConvSet = new Set((keeper.FrontConvIds||'').split('|').filter(Boolean));
+    archivees.forEach(a => (a.FrontConvIds||'').split('|').filter(Boolean).forEach(c => keeperConvSet.add(c)));
+    const newKeeperConvStr = Array.from(keeperConvSet).join('|');
+    let done = 0, errs = 0;
+    bulkProgressStep(`Updating keeper ${keeper.RefId} with ${keeperConvSet.size} conv ID(s)...`, 0, archivees.length + 1);
+    try {
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${keeper.id}/fields`, { method:'PATCH', body: JSON.stringify({ FrontConversationIds: newKeeperConvStr, LastActivityAt: new Date().toISOString() }) });
+        keeper.FrontConvIds = newKeeperConvStr; keeper.FrontConversationIds = newKeeperConvStr;
+        await appendActivityLog(keeper.id, 'Merged '+archivees.length+' duplicate item(s) into this one: '+archivees.map(a=>a.RefId).join(', '));
+        bulkProgressLog(`✓ ${keeper.RefId}: consolidated ${keeperConvSet.size} conv ID(s)`);
+    } catch(e){ errs++; bulkProgressLog(`✗ Keeper update failed: ${e.message}`); }
+    done++;
+    for(const a of archivees){
+        try {
+            await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${a.id}/fields`, {
+                method:'PATCH',
+                body: JSON.stringify({ Status:'Not Related', Archived:true, ReopenedFrom:'', LastActivityAt: new Date().toISOString() })
+            });
+            a.Status='Not Related'; a.Archived=true;
+            await appendActivityLog(a.id, 'Merged into '+(keeper.RefId||'keeper')+' (duplicate of '+keeper.id+')');
+            bulkProgressLog(`✓ ${a.RefId}: archived as Not Related, merged into ${keeper.RefId}`);
+        } catch(e){ errs++; bulkProgressLog(`✗ ${a.RefId}: ${e.message}`); }
+        done++;
+        bulkProgressStep(`Archiving duplicates... (${done}/${archivees.length+1})`, done, archivees.length + 1);
+        await sleepMs(80);
+    }
+    bulkProgressDone(`Merge complete — ${archivees.length - errs} archived, ${errs} error(s)`);
+}
+
+// ─── ASSIGN ────────────────────────────────────────────────────
+function openBulkAssignModal(){
+    if(!selectedIds.size) return;
+    document.getElementById('bulkAssignSearch').value = '';
+    renderBulkAssignList(siteUsers.slice(0,50));
+    document.getElementById('bulkAssignModal').classList.add('visible');
+    setTimeout(()=>document.getElementById('bulkAssignSearch').focus(),50);
+}
+function renderBulkAssignList(list){
+    const html = `<div class="bulk-opt" onclick="runBulkAssign('','')"><div class="avatar" style="background:#9ca3af">?</div>Unassigned</div>` +
+        list.map(u => `<div class="bulk-opt" onclick="runBulkAssign('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')">
+            <div class="avatar" style="background:${acolor(u.id,u.name)}">${initials(u.name)}</div>${esc(u.name)}
+        </div>`).join('');
+    document.getElementById('bulkAssignList').innerHTML = html;
+}
+function filterBulkAssignees(){
+    const q = document.getElementById('bulkAssignSearch').value.toLowerCase();
+    const list = q.length<2 ? siteUsers.slice(0,50) : siteUsers.filter(u => (u.name||'').toLowerCase().includes(q)).slice(0,50);
+    renderBulkAssignList(list);
+}
+async function runBulkAssign(userId, userName){
+    closeBulkModal('bulkAssignModal');
+    const items = getSelectedRequests();
+    if(!items.length) return;
+    const assignFieldName = await getAssignedFieldName();
+    bulkProgressOpen('Assigning '+items.length+' item(s) to '+(userName||'Unassigned'));
+    let done = 0, errs = 0;
+    for(const r of items){
+        try {
+            const fields = {}; fields[assignFieldName] = userId ? parseInt(userId) : null;
+            await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${r.id}/fields`, { method:'PATCH', body: JSON.stringify(fields) });
+            r.AssignedId = userId || null; r.AssignedName = userName || null;
+            bulkProgressLog(`✓ ${r.RefId}: → ${userName||'Unassigned'}`);
+        } catch(e){ errs++; bulkProgressLog(`✗ ${r.RefId}: ${e.message}`); }
+        done++;
+        bulkProgressStep(`Assigning... (${done}/${items.length})`, done, items.length);
+        await sleepMs(60);
+    }
+    bulkProgressDone(`Assigned ${items.length - errs} item(s), ${errs} error(s)`);
+}
+
+// ─── CHANGE STATUS ────────────────────────────────────────────────────
+function openBulkStatusModal(){
+    if(!selectedIds.size) return;
+    const body = document.getElementById('bulkStatusBody');
+    body.innerHTML = `<p style="margin:0 0 12px;font-size:13px;color:#475569">Set status for <b>${selectedIds.size}</b> selected item${selectedIds.size===1?'':'s'}. Front-archive, reopen, and tag effects will apply per item.</p>` +
+        STATUSES.map(s => `<div class="bulk-opt" onclick="runBulkStatus('${s.replace(/'/g,"\\'")}')"><div class="dot" style="background:${STATUS_COLORS[s]||'#64748b'}"></div>${esc(s)}</div>`).join('');
+    document.getElementById('bulkStatusModal').classList.add('visible');
+}
+async function runBulkStatus(status){
+    closeBulkModal('bulkStatusModal');
+    const items = getSelectedRequests();
+    if(!items.length) return;
+    bulkProgressOpen('Setting status to "'+status+'" on '+items.length+' item(s)');
+    let done = 0, errs = 0;
+    for(const r of items){
+        try {
+            await setStatus(r.id, status);
+            bulkProgressLog(`✓ ${r.RefId}: → ${status}`);
+        } catch(e){ errs++; bulkProgressLog(`✗ ${r.RefId}: ${e.message}`); }
+        done++;
+        bulkProgressStep(`Updating... (${done}/${items.length})`, done, items.length);
+        await sleepMs(120);
+    }
+    bulkProgressDone(`Status updated on ${items.length - errs} item(s), ${errs} error(s)`);
+}
+
+// ─── MARK NOT RELATED ────────────────────────────────────────────────────
+async function confirmBulkNotRelated(){
+    if(!selectedIds.size) return;
+    if(!confirm(`Mark ${selectedIds.size} item${selectedIds.size===1?'':'s'} as Not Related?\n\nThis will remove the Certificates tag from Front and archive the conversation(s). The items will move to the Archived tab.`)) return;
+    await runBulkStatus('Not Related');
+}
+
+// ─── PROGRESS MODAL HELPERS ────────────────────────────────────────────────────
+function bulkProgressOpen(title){
+    document.getElementById('bulkProgressTitle').textContent = title;
+    document.getElementById('bulkProgressStatus').textContent = 'Starting...';
+    document.getElementById('bulkProgressBar').style.width = '0%';
+    document.getElementById('bulkProgressDetails').textContent = '';
+    document.getElementById('bulkProgressDone').style.display = 'none';
+    document.getElementById('bulkProgressModal').classList.add('visible');
+}
+function bulkProgressStep(msg, done, total){
+    document.getElementById('bulkProgressStatus').textContent = msg;
+    const pct = total > 0 ? Math.min(100, Math.round((done/total)*100)) : 0;
+    document.getElementById('bulkProgressBar').style.width = pct + '%';
+}
+function bulkProgressLog(line){
+    const el = document.getElementById('bulkProgressDetails');
+    el.textContent += (el.textContent ? '\n' : '') + line;
+    el.scrollTop = el.scrollHeight;
+}
+function bulkProgressDone(msg){
+    document.getElementById('bulkProgressStatus').textContent = msg;
+    document.getElementById('bulkProgressBar').style.width = '100%';
+    document.getElementById('bulkProgressDone').style.display = 'inline-flex';
+}
+function bulkProgressFinish(){
+    closeBulkModal('bulkProgressModal');
+    clearBulkSelection();
+    loadData(true);
 }
 
 async function setStatus(id, status){
