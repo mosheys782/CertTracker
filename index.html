@@ -639,13 +639,22 @@ const CONFIG = {
 // ════════════════════════════════════════════════════════════════════
 //  CONSTANTS
 // ════════════════════════════════════════════════════════════════════
-const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied','Completed','Completed - Front','Merged','Not Related'];
-const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#0891b2','Processing':'#ea580c','Customer Replied':'#0284c7','Carrier Replied':'#f97316','Completed':'#16a34a','Completed - Front':'#15803d','Merged':'#8b5cf6','Delivered':'#059669','Not Related':'#94a3b8'};
+const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Snoozed - Front','Processing','Customer Replied','Carrier Replied','Completed','Completed - Front','Merged','Not Related'];
+const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#0891b2','Snoozed - Front':'#6366f1','Processing':'#ea580c','Customer Replied':'#0284c7','Carrier Replied':'#f97316','Completed':'#16a34a','Completed - Front':'#15803d','Merged':'#8b5cf6','Delivered':'#059669','Not Related':'#94a3b8'};
 const EXIT_STATUSES = ['Delivered','Not Related'];
 const ACTIVE_STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied'];
 const DONE_STATUSES = ['Completed','Completed - Front','Delivered','Merged'];
 const COMPLETED_STATUSES = ['Completed','Completed - Front','Merged'];
 const REPLIED_STATUSES = ['Customer Replied','Carrier Replied'];
+
+// Snoozed - Front is treated like Pending for filter/count purposes:
+// shows in All Pending + My Pending, excluded from All Open Requests,
+// but NOT considered Completed/Archived.
+function isPendingLike(r){
+    const s = r && r.Status;
+    if(!s) return false;
+    return s.startsWith('Pending') || s === 'Snoozed - Front';
+}
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -1514,6 +1523,31 @@ async function loadRequests(silent=false){
             console.log(`[merge-heal] Healed ${Math.min(mergeVictims.length, MERGE_HEAL_CAP)} previously-misfiled merge archivees.`);
         }
 
+        // ════════════════════════════════════════════════════════════════
+        //  SNOOZE-HEAL
+        //  Older backend treated any non-archived Front conv as "active" and any
+        //  archived as Completed - Front. Snoozed convs could get mislabeled
+        //  because manual backfill runs called snoozed convs "archived."
+        //  Trigger a backend poll to re-evaluate Front state for all linked convs —
+        //  the new backend knows how to handle snooze and will correct any
+        //  mislabeled items in place. This is fire-and-forget; the next page refresh
+        //  will pick up the corrections.
+        //  Only fires on fresh page load (not silent refresh) to avoid hammering.
+        // ════════════════════════════════════════════════════════════════
+        if(!silent && CONFIG.frontProxyUrl){
+            try {
+                fetch(`${CONFIG.frontProxyUrl}/front-poll-now`).then(async r=>{
+                    if(!r.ok) return;
+                    const d = await r.json();
+                    const snoozed = (d.autoCompleted||[]).filter(x => x.action === 'snoozed').length;
+                    const unsnoozed = (d.reopened||[]).filter(x => x.action === 'un-snoozed').length;
+                    if(snoozed || unsnoozed){
+                        console.log(`[snooze-heal] Backend reconciled Front snooze state: ${snoozed} snoozed, ${unsnoozed} un-snoozed`);
+                    }
+                }).catch(e => console.warn('[snooze-heal] poll failed:', e));
+            } catch(e){ console.warn('[snooze-heal] trigger failed:', e); }
+        }
+
         buildAssigneeFilter();
         renderAll();
     } catch(e){
@@ -1623,12 +1657,12 @@ function changePageSize(size){
 // ════════════════════════════════════════════════════════════════════
 function updateStats(){
     const today = new Date(); today.setHours(0,0,0,0);
-    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !r.Status.startsWith("Pending"));
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !isPendingLike(r));
     const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
     const counts = {
         openAll:     active.length,
         newReq:      active.filter(r => r.Status==='New Request').length,
-        pending:     active.filter(r => r.Status.startsWith('Pending')).length,
+        pending:     requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && isPendingLike(r)).length,
         inProgress:  active.filter(r => ['In Review','Processing','Customer Replied','Carrier Replied'].includes(r.Status)).length,
         custResp:    active.filter(r => r.HasCustomerResponse).length,
         carrResp:    active.filter(r => r.HasCarrierResponse).length,
@@ -1687,9 +1721,9 @@ function updateStats(){
 // ════════════════════════════════════════════════════════════════════
 function renderTabs(){
     const now = new Date();
-    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !r.Status.startsWith("Pending"));
-    const myPending = requests.filter(r => !r.Archived && r.Status.startsWith('Pending') && r.AssignedId===currentUserId);
-    const allPending = requests.filter(r => !r.Archived && r.Status.startsWith('Pending'));
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !isPendingLike(r));
+    const myPending = requests.filter(r => !r.Archived && isPendingLike(r) && r.AssignedId===currentUserId);
+    const allPending = requests.filter(r => !r.Archived && isPendingLike(r));
     const tabs = [
         {key:'myCerts', label:'📜 My Requests', count:active.filter(r=>r.AssignedId===currentUserId).length},
         {key:'allCerts', label:'📋 All Open Requests', count:active.length},
@@ -1740,19 +1774,21 @@ function applyFilters(){
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(COMPLETED_STATUSES.includes(r.Status)) return false;
             if(isPending) return false;
+            if(r.Status === 'Snoozed - Front') return false;
         }
         if(tab==='allCerts'){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(COMPLETED_STATUSES.includes(r.Status)) return false;
             if(isPending) return false;
+            if(r.Status === 'Snoozed - Front') return false;
         }
         if(tab==='allPending'){
             if(r.Archived) return false;
-            if(!isPending) return false;
+            if(!isPending && r.Status !== 'Snoozed - Front') return false;
         }
         if(tab==='myPending'){
-            if(!isPending) return false;
+            if(!isPending && r.Status !== 'Snoozed - Front') return false;
             if(r.Archived) return false;
         }
         if(tab==='completed'){
