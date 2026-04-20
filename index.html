@@ -212,6 +212,7 @@
         .notif-dot.customer{background:#dbeafe;color:#2563eb}
         .notif-dot.carrier{background:#fff7ed;color:#ea580c}
         .notif-dot.sla{background:#fef2f2;color:#dc2626}
+        .notif-dot.merged{background:#ede9fe;color:#7c3aed;animation:none;cursor:help}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.7}}
 
         /* Status / Assignee / Due badges */
@@ -638,12 +639,12 @@ const CONFIG = {
 // ════════════════════════════════════════════════════════════════════
 //  CONSTANTS
 // ════════════════════════════════════════════════════════════════════
-const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied','Completed','Completed - Front','Not Related'];
-const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#0891b2','Processing':'#ea580c','Customer Replied':'#0284c7','Carrier Replied':'#f97316','Completed':'#16a34a','Completed - Front':'#15803d','Delivered':'#059669','Not Related':'#94a3b8'};
+const STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied','Completed','Completed - Front','Merged','Not Related'];
+const STATUS_COLORS = {'New Request':'#6b7280','In Review':'#2563eb','Pending – Endorsement':'#7c3aed','Pending – Customer Info':'#d97706','Pending – Coverage Change':'#db2777','Pending – Policy Renewal':'#0891b2','Processing':'#ea580c','Customer Replied':'#0284c7','Carrier Replied':'#f97316','Completed':'#16a34a','Completed - Front':'#15803d','Merged':'#8b5cf6','Delivered':'#059669','Not Related':'#94a3b8'};
 const EXIT_STATUSES = ['Delivered','Not Related'];
 const ACTIVE_STATUSES = ['New Request','In Review','Pending – Endorsement','Pending – Customer Info','Pending – Coverage Change','Pending – Policy Renewal','Processing','Customer Replied','Carrier Replied'];
-const DONE_STATUSES = ['Completed','Completed - Front','Delivered'];
-const COMPLETED_STATUSES = ['Completed','Completed - Front'];
+const DONE_STATUSES = ['Completed','Completed - Front','Delivered','Merged'];
+const COMPLETED_STATUSES = ['Completed','Completed - Front','Merged'];
 const REPLIED_STATUSES = ['Customer Replied','Carrier Replied'];
 
 
@@ -1274,6 +1275,7 @@ async function ensureColumnsExist(){
         { name: 'EmailReceivedAt',       text: {} },
         { name: 'LastActivityAt',        text: {} },
         { name: 'SlaResponseAt',         text: {} },
+        { name: 'MergedConvIds',         text: {} },
     ];
     try {
         const existing = await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`);
@@ -1368,6 +1370,7 @@ async function loadRequests(silent=false){
                     FrontConvSubjects:  f.FrontConvSubjects || '',
                     FrontConvFromEmails:f.FrontConvFromEmails || '',
                     FrontConvToEmails:  f.FrontConvToEmails || '',
+                    MergedConvIds:      f.MergedConvIds || '',
                     HasCustomerResponse: f.HasCustomerResponse || false,
                     HasCarrierResponse:  f.HasCarrierResponse || false,
                     SlaBreached:         f.SlaBreached || false,
@@ -1398,6 +1401,11 @@ async function loadRequests(silent=false){
         // ════════════════════════════════════════════════════════════════
         const byConvId = new Map();
         for(const r of requests){
+            // Skip Merged items — they INTENTIONALLY share conv IDs with their keeper
+            // (we want both the keeper and the Merged archivees to show). Without this,
+            // the safety net would hide the archivees because they look like accidental
+            // duplicates of the keeper, and we want them visible in the Completed tab.
+            if(r.Status === 'Merged') continue;
             const ids = (r.FrontConvIds || '').split('|').filter(Boolean);
             for(const cid of ids){
                 if(!byConvId.has(cid)) byConvId.set(cid, []);
@@ -1499,7 +1507,7 @@ function buildAssigneeFilter(){
 //  AUTO-REFRESH (same pattern as Policy Mgmt)
 // ════════════════════════════════════════════════════════════════════
 let lastRefresh = Date.now(), refreshInterval = null, isRefreshing = false;
-const REFRESH_INTERVAL = 5*60*1000;
+const REFRESH_INTERVAL = 2*60*1000;  // Refresh SharePoint data every 2 min (was 5 min)
 const VISIBILITY_THRESHOLD = 60*1000;
 
 async function refreshData(silent=false){
@@ -1897,9 +1905,15 @@ function renderTable(){
 
         const sla = getSlaInfo(r);
         const anySlaBreach = (sla.newReq&&sla.newReq.breached)||(sla.response&&sla.response.breached)||(sla.resolution&&sla.resolution.breached);
+        // Detect merged items: 2+ Front conversation IDs means multiple emails
+        // have been consolidated onto this one request (either via bulk Merge
+        // or by manually linking a carrier conversation).
+        const mergedConvCount = (r.FrontConvIds||'').split('|').map(s=>s.trim()).filter(Boolean).length;
+        const isMerged = mergedConvCount >= 2;
         let notifHtml='';
-        if(r.HasCustomerResponse||r.HasCarrierResponse||r.SlaBreached||anySlaBreach||sla.newReq||sla.response){
+        if(r.HasCustomerResponse||r.HasCarrierResponse||r.SlaBreached||anySlaBreach||sla.newReq||sla.response||isMerged){
             notifHtml='<div class="notif-dots">';
+            if(isMerged) notifHtml+='<span class="notif-dot merged" title="This request has '+mergedConvCount+' linked Front conversations">🔀 '+mergedConvCount+' merged</span>';
             if(r.HasCustomerResponse) notifHtml+='<span class="notif-dot customer">💬 Customer</span>';
             if(r.HasCarrierResponse) notifHtml+='<span class="notif-dot carrier">🏢 Carrier</span>';
             if(sla.newReq) notifHtml+='<span class="notif-dot sla" title="New Request SLA">'+(sla.newReq.breached?'🚨 NR: BREACHED':'⏱️ NR: '+sla.newReq.label)+'</span>';
@@ -2087,8 +2101,9 @@ function openBulkMergeModal(){
         <div style="margin-top:14px;padding:10px 12px;background:#f8fafc;border-radius:8px;font-size:12px;color:#475569;line-height:1.6">
             <b>Result on ${esc(keeper.RefId||'')}:</b><br>
             • ${keeperConvs.size + addConvs.size} total Front conversation${(keeperConvs.size + addConvs.size)===1?'':'s'} (${keeperConvs.size} existing + ${addConvs.size} added)<br>
-            • Front tags are <b>preserved</b> — all conversations stay accessible in Front<br>
-            • If a customer replies on any linked conversation, it'll reopen ${esc(keeper.RefId||'')}
+            • The ${addConvs.size} duplicate conversation${addConvs.size===1?'':'s'} will be <b>archived in Front</b> (keeper's own conv stays open)<br>
+            • Duplicates get status "<b>Merged</b>" and appear in the Completed tab (email link preserved)<br>
+            • Merge takes ~6s to complete safely (waiting for Front webhooks to settle)
         </div>
     `;
     document.getElementById('bulkMergeModal').classList.add('visible');
@@ -2106,33 +2121,120 @@ async function runBulkMerge(){
     const keeper = items[0];
     const archivees = items.slice(1);
     bulkProgressOpen('Merging '+archivees.length+' into '+(keeper.RefId||''));
-    const keeperConvSet = new Set((keeper.FrontConvIds||'').split('|').filter(Boolean));
-    archivees.forEach(a => (a.FrontConvIds||'').split('|').filter(Boolean).forEach(c => keeperConvSet.add(c)));
-    const newKeeperConvStr = Array.from(keeperConvSet).join('|');
+
+    // Build the list of conv IDs to archive in Front (archivees' convs NOT already in keeper)
+    const keeperOwnConvs = new Set((keeper.FrontConvIds||'').split('|').map(s=>s.trim()).filter(Boolean));
+    const archiveeConvs = new Set();
+    archivees.forEach(a => (a.FrontConvIds||'').split('|').map(s=>s.trim()).filter(Boolean).forEach(cid => {
+        if(!keeperOwnConvs.has(cid)) archiveeConvs.add(cid);
+    }));
+    const convsToArchive = Array.from(archiveeConvs);
+
+    // Final consolidated conv list for keeper
+    const convIdSet = new Set(keeperOwnConvs);
+    archiveeConvs.forEach(c => convIdSet.add(c));
+    const mergedIds = Array.from(convIdSet);
+    const newKeeperConvStr = mergedIds.join('|');
+
+    // === ORDERING to keep the keeper from getting flipped by the Front archive webhook ===
+    // Step 1: Mark archivees as 'Merged' (terminal) — but KEEP their FrontConvIds intact.
+    //         Archivees remain the sole SharePoint owners of their conv IDs.
+    // Step 2: Archive the duplicate convs in Front.
+    //         Front fires 'conversation archived' webhook for each.
+    //         Webhook does findItemsByConvId(conv) → returns the archivee → archivee is 'Merged' (terminal) → skip ✓
+    //         Keeper does NOT yet own these conv IDs, so webhook never finds it.
+    // Step 3: Wait ~6 seconds for all webhook events to settle (Front fires them async).
+    // Step 4: NOW consolidate conv IDs onto the keeper. By now the webhook storm has passed.
+    const totalSteps = archivees.length + (convsToArchive.length ? 2 : 0) + 1;  // +2 = archive + wait
     let done = 0, errs = 0;
-    bulkProgressStep(`Updating keeper ${keeper.RefId} with ${keeperConvSet.size} conv ID(s)...`, 0, archivees.length + 1);
-    try {
-        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${keeper.id}/fields`, { method:'PATCH', body: JSON.stringify({ FrontConversationIds: newKeeperConvStr, LastActivityAt: new Date().toISOString() }) });
-        keeper.FrontConvIds = newKeeperConvStr; keeper.FrontConversationIds = newKeeperConvStr;
-        await appendActivityLog(keeper.id, 'Merged '+archivees.length+' duplicate item(s) into this one: '+archivees.map(a=>a.RefId).join(', '));
-        bulkProgressLog(`✓ ${keeper.RefId}: consolidated ${keeperConvSet.size} conv ID(s)`);
-    } catch(e){ errs++; bulkProgressLog(`✗ Keeper update failed: ${e.message}`); }
-    done++;
+
+    // Step 1: archivees → Merged (keep FrontConvIds!)
     for(const a of archivees){
         try {
             await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${a.id}/fields`, {
                 method:'PATCH',
-                body: JSON.stringify({ Status:'Not Related', Archived:true, ReopenedFrom:'', LastActivityAt: new Date().toISOString() })
+                body: JSON.stringify({
+                    Status:'Merged',
+                    Archived:false,
+                    ReopenedFrom:'',
+                    LastActivityAt: new Date().toISOString()
+                })
             });
-            a.Status='Not Related'; a.Archived=true;
-            await appendActivityLog(a.id, 'Merged into '+(keeper.RefId||'keeper')+' (duplicate of '+keeper.id+')');
-            bulkProgressLog(`✓ ${a.RefId}: archived as Not Related, merged into ${keeper.RefId}`);
-        } catch(e){ errs++; bulkProgressLog(`✗ ${a.RefId}: ${e.message}`); }
+            a.Status='Merged';
+            a.Archived=false;
+            await appendActivityLog(a.id, 'Merged into '+(keeper.RefId||'keeper')+' — conversations transferred to keeper');
+            bulkProgressLog(`✓ ${a.RefId}: status → Merged`);
+        } catch(e){ errs++; bulkProgressLog(`✗ ${a.RefId}: ${e.message}`); console.error('merge archivee patch failed:', e); }
         done++;
-        bulkProgressStep(`Archiving duplicates... (${done}/${archivees.length+1})`, done, archivees.length + 1);
+        bulkProgressStep(`Updating duplicates... (${done}/${totalSteps})`, done, totalSteps);
         await sleepMs(80);
     }
-    bulkProgressDone(`Merge complete — ${archivees.length - errs} archived, ${errs} error(s)`);
+
+    // Step 2: archive the duplicate conversations in Front
+    if(convsToArchive.length && CONFIG.frontProxyUrl){
+        bulkProgressStep(`Archiving ${convsToArchive.length} duplicate conv(s) in Front...`, done, totalSteps);
+        try {
+            const resp = await fetch(`${CONFIG.frontProxyUrl}/front-archive`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationIds: convsToArchive })
+            });
+            const respText = await resp.text();
+            if(!resp.ok){
+                errs++;
+                bulkProgressLog(`✗ Front archive request failed: ${resp.status} — ${respText.substring(0,200)}`);
+                console.error('Merge: Front archive failed:', resp.status, respText);
+            } else {
+                let archived = 0, failed = 0;
+                try {
+                    const data = JSON.parse(respText);
+                    const results = data.results || [];
+                    for(const res of results){
+                        if(res.status === 'archived') archived++;
+                        else { failed++; console.warn('Merge — conv archive failed:', res); }
+                    }
+                } catch(parseErr){ console.warn('Could not parse archive response:', parseErr); }
+                if(failed > 0){
+                    bulkProgressLog(`⚠ Front: ${archived} archived, ${failed} failed (see console)`);
+                } else {
+                    bulkProgressLog(`✓ Front: archived ${archived} duplicate conversation(s)`);
+                }
+            }
+        } catch(e){ errs++; bulkProgressLog(`✗ Front archive error: ${e.message}`); console.error('Merge Front archive network error:', e); }
+        done++;
+
+        // Step 3: WAIT for Front archive webhooks to settle before giving keeper the conv IDs
+        bulkProgressStep(`Waiting 6s for Front webhooks to settle...`, done, totalSteps);
+        bulkProgressLog(`… waiting 6s for webhooks to finish processing (prevents keeper getting flagged)`);
+        await sleepMs(6000);
+        done++;
+    }
+
+    // Step 4: NOW consolidate all conv IDs onto keeper (safe — webhook storm has passed)
+    bulkProgressStep(`Updating keeper ${keeper.RefId} with ${mergedIds.length} conv ID(s)...`, done, totalSteps);
+    try {
+        // Preserve any previously-merged conv IDs and append the new ones
+        const existingMerged = new Set((keeper.MergedConvIds||'').split('|').map(s=>s.trim()).filter(Boolean));
+        convsToArchive.forEach(c => existingMerged.add(c));
+        const mergedConvIdsStr = Array.from(existingMerged).join('|');
+
+        await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${keeper.id}/fields`, {
+            method:'PATCH',
+            body: JSON.stringify({
+                FrontConversationIds: newKeeperConvStr,
+                MergedConvIds: mergedConvIdsStr,
+                LastActivityAt: new Date().toISOString()
+            })
+        });
+        keeper.FrontConvIds         = newKeeperConvStr;
+        keeper.FrontConversationIds = newKeeperConvStr;
+        keeper.MergedConvIds        = mergedConvIdsStr;
+        await appendActivityLog(keeper.id, 'Merged '+archivees.length+' duplicate(s) into this: '+archivees.map(a=>a.RefId).join(', ')+' — now owns '+mergedIds.length+' Front conv(s)');
+        bulkProgressLog(`✓ ${keeper.RefId}: consolidated ${mergedIds.length} conv ID(s), ${existingMerged.size} in ignore-list`);
+    } catch(e){ errs++; bulkProgressLog(`✗ Keeper update failed: ${e.message}`); console.error('merge keeper patch failed:', e); }
+    done++;
+
+    bulkProgressDone(`Merge complete — ${archivees.length - (errs>archivees.length?archivees.length:0)} marked Merged${convsToArchive.length?', '+convsToArchive.length+' conv(s) archived in Front':''}, ${errs} error(s)`);
 }
 
 // ─── ASSIGN ────────────────────────────────────────────────────
@@ -2232,11 +2334,24 @@ function bulkProgressDone(msg){
     document.getElementById('bulkProgressStatus').textContent = msg;
     document.getElementById('bulkProgressBar').style.width = '100%';
     document.getElementById('bulkProgressDone').style.display = 'inline-flex';
+    // Immediately re-render using the in-memory state so the user sees the updated
+    // tabs/counts behind the progress modal (no need to wait for Done + full reload).
+    try {
+        if(typeof renderAll === 'function') renderAll();
+        else {
+            if(typeof applyFilters === 'function') applyFilters();
+            if(typeof updateStats === 'function') updateStats();
+            if(typeof renderTabs === 'function') renderTabs();
+        }
+    } catch(e){ console.warn('bulkProgressDone render failed:', e); }
 }
 function bulkProgressFinish(){
     closeBulkModal('bulkProgressModal');
     clearBulkSelection();
-    loadData(true);
+    // Background sync — re-fetch from SharePoint to pick up any server-side changes
+    // (e.g., webhook-driven status updates). User sees the in-memory state instantly
+    // via bulkProgressDone; this catches up the rest.
+    loadRequests(true).then(()=>{ if(typeof renderAll==='function') renderAll(); else { if(typeof applyFilters==='function')applyFilters(); if(typeof updateStats==='function')updateStats(); if(typeof renderTabs==='function')renderTabs(); } });
 }
 
 async function setStatus(id, status){
@@ -2276,12 +2391,12 @@ async function setStatus(id, status){
             if(fields.SlaResponseAt!==undefined) r.SlaResponseAt=fields.SlaResponseAt;
         }
         await appendActivityLog(id, 'Status changed to "'+status+'"');
-        const CLOSED = ['Completed','Completed - Front','Delivered','Not Related'];
+        const CLOSED = ['Completed','Completed - Front','Delivered','Not Related','Merged'];
         const prevStatus = r ? r._prevStatus : null;
         const isReopen = prevStatus && CLOSED.includes(prevStatus) && !CLOSED.includes(status);
         // Reopen: unarchive Front conversation and re-apply Certificates tag
         if(isReopen && r && CONFIG.frontProxyUrl){
-            const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
+            const convIds = (r.FrontConvIds||'').split('|').map(s=>s.trim()).filter(Boolean);
             if(convIds.length){
                 try {
                     console.log('Front reopen: sending', convIds.length, 'conversation(s):', convIds);
@@ -2307,7 +2422,7 @@ async function setStatus(id, status){
             }
         // Archive Front conversations when Completed (or Completed - Front)
         } else if((status === 'Completed' || status === 'Completed - Front') && r && CONFIG.frontProxyUrl){
-            const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
+            const convIds = (r.FrontConvIds||'').split('|').map(s=>s.trim()).filter(Boolean);
             if(convIds.length){
                 try {
                     console.log('Front archive: sending', convIds.length, 'conversation(s):', convIds);
@@ -2322,7 +2437,23 @@ async function setStatus(id, status){
                         toast('Status → '+status+' (Front archive failed: '+resp.status+')','err');
                     } else {
                         console.log('Front archive success:', respText);
-                        toast('Status → '+status+' (Front archived)','ok');
+                        // Parse results to show per-conv outcome
+                        let archived = 0, failed = 0;
+                        try {
+                            const data = JSON.parse(respText);
+                            const results = data.results || [];
+                            for(const res of results){
+                                if(res.status === 'archived') archived++;
+                                else { failed++; console.warn('Front archive — conv failed:', res); }
+                            }
+                        } catch(parseErr){ console.warn('Could not parse archive response:', parseErr); }
+                        if(failed > 0){
+                            toast(`Status → ${status} (Front: ${archived} archived, ${failed} failed — check console)`,'err');
+                        } else if(archived === convIds.length){
+                            toast(`Status → ${status} (${archived} conv${archived===1?'':'s'} archived in Front)`,'ok');
+                        } else {
+                            toast('Status → '+status+' (Front archived)','ok');
+                        }
                     }
                 } catch(e){ 
                     console.error('Front archive network error:', e);
@@ -2334,7 +2465,7 @@ async function setStatus(id, status){
             }
         // Remove Certificates tag, add Frimy, and archive when Not Related
         } else if(status === 'Not Related' && r && CONFIG.frontProxyUrl){
-            const convIds = (r.FrontConvIds||'').split('|').filter(Boolean);
+            const convIds = (r.FrontConvIds||'').split('|').map(s=>s.trim()).filter(Boolean);
             if(convIds.length){
                 try {
                     console.log('Front not-related: sending', convIds.length, 'conversation(s):', convIds);
@@ -2688,7 +2819,7 @@ async function saveRequest(){
             }
 
             // Front reopen when moving from closed to active via panel Save
-            const CLOSED = ['Completed','Completed - Front','Delivered','Not Related'];
+            const CLOSED = ['Completed','Completed - Front','Delivered','Not Related','Merged'];
             const isReopen = CLOSED.includes(prevStatus) && !CLOSED.includes(newStatus);
             if(isReopen && CONFIG.frontProxyUrl){
                 const convIds = (selected.FrontConvIds||'').split('|').filter(Boolean);
@@ -3998,7 +4129,8 @@ async function importFromFront(){
     }
 }
 
-// Auto-poll Front every 3 minutes (browser-side)
+// Auto-poll Front every 60 seconds (browser-side). Webhook handles instant cases;
+// this poll catches anything the webhook missed and reply detection on existing items.
 let frontPollInterval = null;
 function startFrontPoll(){
     if(frontPollInterval) clearInterval(frontPollInterval);
@@ -4011,12 +4143,18 @@ function startFrontPoll(){
             const newCount = (data.created||[]).length;
             const flagged = (data.flagged||[]).length;
             const reopened = (data.reopened||[]).length;
-            if(newCount || flagged || reopened){
-                toast((newCount?newCount+' new ':'')+(flagged?flagged+' replies ':'')+(reopened?reopened+' reopened':''), 'ok');
+            const autoCompleted = (data.autoCompleted||[]).length;
+            if(newCount || flagged || reopened || autoCompleted){
+                const msgs = [];
+                if(newCount) msgs.push(newCount+' new');
+                if(flagged) msgs.push(flagged+' replies');
+                if(reopened) msgs.push(reopened+' reopened');
+                if(autoCompleted) msgs.push(autoCompleted+' auto-completed');
+                toast(msgs.join(', '), 'ok');
                 await loadRequests(true);
             }
         } catch(e){ console.warn('Auto-poll failed:', e); }
-    }, 3 * 60 * 1000);
+    }, 60 * 1000);  // was 3 min, now 1 min
 }
 
 // Start auto-poll when app loads (after first data load)
