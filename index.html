@@ -1483,6 +1483,37 @@ async function loadRequests(silent=false){
             console.warn(`[auto-move] ${pendingWithReply.length} pending-with-reply items — only moved first ${AUTO_MOVE_CAP}.`);
         }
 
+        // ════════════════════════════════════════════════════════════════
+        //  MERGE-VICTIM HEALING
+        //  Fix items that look like they were merge archivees but got flipped to
+        //  "Completed - Front" by the Front archive webhook (happens when the
+        //  archive event arrived before SharePoint had committed the Status='Merged'
+        //  patch, OR when running an older backend that didn't know about 'Merged').
+        //  Detection: Status is 'Completed - Front' AND Notes contain 'Merged into '.
+        //  Action: change status to 'Merged' (silently, no toast).
+        //  SAFETY CAP: same reasoning as auto-assign — bound the work per page load.
+        // ════════════════════════════════════════════════════════════════
+        const mergeVictims = requests.filter(r =>
+            r.Status === 'Completed - Front' &&
+            (r.Notes||'').includes('Merged into ')
+        );
+        const MERGE_HEAL_CAP = 50;
+        for(const r of mergeVictims.slice(0, MERGE_HEAL_CAP)){
+            try {
+                await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${r.id}/fields`,
+                    { method:'PATCH', body:JSON.stringify({ Status: 'Merged', LastActivityAt: new Date().toISOString() }) });
+                r.Status = 'Merged';
+                r.LastActivityAt = new Date().toISOString();
+                console.log(`[merge-heal] Corrected ${r.RefId} from Completed - Front → Merged (was a merge archivee)`);
+            } catch(e){ console.warn('[merge-heal] Failed for', r.RefId, e); }
+        }
+        if(mergeVictims.length > MERGE_HEAL_CAP){
+            console.warn(`[merge-heal] ${mergeVictims.length} merge-victim items — only healed first ${MERGE_HEAL_CAP}.`);
+        }
+        if(mergeVictims.length > 0){
+            console.log(`[merge-heal] Healed ${Math.min(mergeVictims.length, MERGE_HEAL_CAP)} previously-misfiled merge archivees.`);
+        }
+
         buildAssigneeFilter();
         renderAll();
     } catch(e){
@@ -2148,20 +2179,32 @@ async function runBulkMerge(){
     const totalSteps = archivees.length + (convsToArchive.length ? 2 : 0) + 1;  // +2 = archive + wait
     let done = 0, errs = 0;
 
-    // Step 1: archivees → Merged (keep FrontConvIds!)
+    // Step 1: archivees → Merged (keep FrontConvIds!) + write MergedConvIds=own conv list
+    // The MergedConvIds field tells the webhook/poll: "these archived convs are
+    // expected — don't flip the item." We set this on BOTH archivees (their own conv)
+    // AND keeper (their merged-in convs) so whichever item the webhook lookup finds,
+    // the skip-list is populated.
     for(const a of archivees){
         try {
+            const archiveeOwnConvs = (a.FrontConvIds||'').split('|').map(s=>s.trim()).filter(Boolean);
+            // Preserve any existing MergedConvIds on the archivee + add its own convs
+            const existingMergedOnArchivee = new Set((a.MergedConvIds||'').split('|').map(s=>s.trim()).filter(Boolean));
+            archiveeOwnConvs.forEach(c => existingMergedOnArchivee.add(c));
+            const archiveeMergedStr = Array.from(existingMergedOnArchivee).join('|');
+
             await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${a.id}/fields`, {
                 method:'PATCH',
                 body: JSON.stringify({
                     Status:'Merged',
                     Archived:false,
                     ReopenedFrom:'',
+                    MergedConvIds: archiveeMergedStr,
                     LastActivityAt: new Date().toISOString()
                 })
             });
             a.Status='Merged';
             a.Archived=false;
+            a.MergedConvIds = archiveeMergedStr;
             await appendActivityLog(a.id, 'Merged into '+(keeper.RefId||'keeper')+' — conversations transferred to keeper');
             bulkProgressLog(`✓ ${a.RefId}: status → Merged`);
         } catch(e){ errs++; bulkProgressLog(`✗ ${a.RefId}: ${e.message}`); console.error('merge archivee patch failed:', e); }
