@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CertTracker v67 - Certificate & Endorsement Request Management -->
+<!-- CertTracker v68 - Certificate & Endorsement Request Management -->
 <!-- Production Build — SharePoint + Front App + AMS360 -->
 <html lang="en">
 <head>
@@ -11,7 +11,7 @@
     <title>CertTracker</title>
     <script>
     // ONE-TIME FORCE REFRESH
-    var FORCE_REFRESH_VERSION = 67;
+    var FORCE_REFRESH_VERSION = 68;
     (function(){
         var key = 'ct_force_refresh_v';
         var lastForced = localStorage.getItem(key);
@@ -656,6 +656,14 @@ function isPendingLike(r){
     return s.startsWith('Pending') || s === 'Snoozed - Front';
 }
 
+// A Pending item whose SLA has expired is semantically "back on the active
+// board" — it should count as active/open (My Requests + All Open Requests)
+// and NOT count as pending anymore. Status text stays 'Pending – ...' so the
+// user still sees what they were waiting on, but workflow-wise it's active.
+function isEffectivelyPending(r){
+    return isPendingLike(r) && !(r && r.SlaExpired);
+}
+
 
 // ════════════════════════════════════════════════════════════════════
 //  HEBREW CALENDAR LIBRARY (ported from OpsPay)
@@ -1285,6 +1293,7 @@ async function ensureColumnsExist(){
         { name: 'LastActivityAt',        text: {} },
         { name: 'SlaResponseAt',         text: {} },
         { name: 'MergedConvIds',         text: {} },
+        { name: 'SlaExpired',            boolean: {} },
     ];
     try {
         const existing = await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/columns`);
@@ -1387,6 +1396,7 @@ async function loadRequests(silent=false){
                     EmailReceivedAt:     f.EmailReceivedAt || '',
                     LastActivityAt:      f.LastActivityAt || '',
                     SlaResponseAt:       f.SlaResponseAt || '',
+                    SlaExpired:          f.SlaExpired || false,
                 });
             });
             url = r['@odata.nextLink'] ? r['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
@@ -1482,14 +1492,55 @@ async function loadRequests(silent=false){
             const newStatus = r.HasCustomerResponse ? 'Customer Replied' : 'Carrier Replied';
             try {
                 await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${r.id}/fields`,
-                    { method:'PATCH', body:JSON.stringify({ Status: newStatus, LastActivityAt: new Date().toISOString() }) });
+                    { method:'PATCH', body:JSON.stringify({ Status: newStatus, LastActivityAt: new Date().toISOString(), SlaExpired: false }) });
                 r.Status = newStatus;
                 r.LastActivityAt = new Date().toISOString();
+                r.SlaExpired = false;
                 console.log(`Auto-moved ${r.RefId} from Pending → ${newStatus}`);
             } catch(e){ console.warn('Failed to auto-move', r.RefId, e); }
         }
         if(pendingWithReply.length > AUTO_MOVE_CAP){
             console.warn(`[auto-move] ${pendingWithReply.length} pending-with-reply items — only moved first ${AUTO_MOVE_CAP}.`);
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  PENDING SLA COMEBACK — client-side safety net
+        //  Finds pending items whose SlaResponseAt (or ModifiedAt+2bd
+        //  fallback, matching buildPendingBadge logic) is >1h in the past
+        //  and marks them SlaExpired=true. This makes them reappear in
+        //  the All Requests tab and bubble to top while KEEPING their
+        //  'Pending – ...' status so the user still knows what they were
+        //  waiting for. User can extend (clears flag) or change status.
+        //  SAFETY CAP: same pattern as auto-assign/auto-move.
+        // ════════════════════════════════════════════════════════════════
+        const nowMs = Date.now();
+        const GRACE_MS = 60*60*1000; // 1h grace past deadline
+        function _computePendingDeadline(r){
+            if(r.SlaResponseAt) return new Date(r.SlaResponseAt).getTime();
+            if(r.ModifiedAt)    return addWorkingDays(2, new Date(r.ModifiedAt)).getTime();
+            return 0;
+        }
+        const expiredPending = requests.filter(r =>
+            !r.Archived &&
+            r.Status && r.Status.startsWith('Pending') &&
+            !r.SlaExpired &&
+            !r.HasCustomerResponse && !r.HasCarrierResponse
+        ).filter(r => {
+            const dl = _computePendingDeadline(r);
+            return dl && (nowMs - dl) > GRACE_MS;
+        });
+        const SLA_EXPIRE_CAP = 50;
+        for(const r of expiredPending.slice(0, SLA_EXPIRE_CAP)){
+            try {
+                await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${r.id}/fields`,
+                    { method:'PATCH', body:JSON.stringify({ SlaExpired: true, LastActivityAt: new Date().toISOString() }) });
+                r.SlaExpired = true;
+                r.LastActivityAt = new Date().toISOString();
+                console.log(`SLA-expired: ${r.RefId} (was ${r.Status})`);
+            } catch(e){ console.warn('Failed to mark SLA-expired', r.RefId, e); }
+        }
+        if(expiredPending.length > SLA_EXPIRE_CAP){
+            console.warn(`[sla-expire] ${expiredPending.length} expired-pending items — only marked first ${SLA_EXPIRE_CAP}.`);
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -1657,12 +1708,12 @@ function changePageSize(size){
 // ════════════════════════════════════════════════════════════════════
 function updateStats(){
     const today = new Date(); today.setHours(0,0,0,0);
-    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !isPendingLike(r));
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !isEffectivelyPending(r));
     const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
     const counts = {
         openAll:     active.length,
         newReq:      active.filter(r => r.Status==='New Request').length,
-        pending:     requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && isPendingLike(r)).length,
+        pending:     requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && isEffectivelyPending(r)).length,
         inProgress:  active.filter(r => ['In Review','Processing','Customer Replied','Carrier Replied'].includes(r.Status)).length,
         custResp:    active.filter(r => r.HasCustomerResponse).length,
         carrResp:    active.filter(r => r.HasCarrierResponse).length,
@@ -1721,9 +1772,9 @@ function updateStats(){
 // ════════════════════════════════════════════════════════════════════
 function renderTabs(){
     const now = new Date();
-    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !isPendingLike(r));
-    const myPending = requests.filter(r => !r.Archived && isPendingLike(r) && r.AssignedId===currentUserId);
-    const allPending = requests.filter(r => !r.Archived && isPendingLike(r));
+    const active = requests.filter(r => !r.Archived && !EXIT_STATUSES.includes(r.Status) && !COMPLETED_STATUSES.includes(r.Status) && !isEffectivelyPending(r));
+    const myPending = requests.filter(r => !r.Archived && isEffectivelyPending(r) && r.AssignedId===currentUserId);
+    const allPending = requests.filter(r => !r.Archived && isEffectivelyPending(r));
     const tabs = [
         {key:'myCerts', label:'📜 My Requests', count:active.filter(r=>r.AssignedId===currentUserId).length},
         {key:'allCerts', label:'📋 All Open Requests', count:active.length},
@@ -1773,23 +1824,25 @@ function applyFilters(){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(COMPLETED_STATUSES.includes(r.Status)) return false;
-            if(isPending) return false;
+            if(isPending && !r.SlaExpired) return false; // expired pending items surface here
             if(r.Status === 'Snoozed - Front') return false;
         }
         if(tab==='allCerts'){
             if(r.Archived) return false;
             if(EXIT_STATUSES.includes(r.Status)) return false;
             if(COMPLETED_STATUSES.includes(r.Status)) return false;
-            if(isPending) return false;
+            if(isPending && !r.SlaExpired) return false; // expired pending items surface here
             if(r.Status === 'Snoozed - Front') return false;
         }
         if(tab==='allPending'){
             if(r.Archived) return false;
             if(!isPending && r.Status !== 'Snoozed - Front') return false;
+            if(r.SlaExpired) return false; // expired items moved to Active/Open
         }
         if(tab==='myPending'){
             if(!isPending && r.Status !== 'Snoozed - Front') return false;
             if(r.Archived) return false;
+            if(r.SlaExpired) return false; // expired items moved to Active/Open
         }
         if(tab==='completed'){
             if(!COMPLETED_STATUSES.includes(r.Status)) return false;
@@ -1807,7 +1860,7 @@ function applyFilters(){
             if(statFilter==='newReq' && r.Status!=='New Request') return false;
             if(statFilter==='pastDue' && (!dl||dl>=today||EXIT_STATUSES.includes(r.Status))) return false;
             if(statFilter==='dueToday' && (!dl||dl.getTime()!==today.getTime()||EXIT_STATUSES.includes(r.Status))) return false;
-            if(statFilter==='pending' && !r.Status.startsWith('Pending')) return false;
+            if(statFilter==='pending' && !(r.Status.startsWith('Pending') && !r.SlaExpired)) return false;
             if(statFilter==='inProgress' && !['In Review','Processing','Customer Replied','Carrier Replied'].includes(r.Status)) return false;
             if(statFilter==='custResp' && !r.HasCustomerResponse) return false;
             if(statFilter==='carrResp' && !r.HasCarrierResponse) return false;
@@ -1859,8 +1912,8 @@ function applyFilters(){
     function sortKey(r){
         const openTs = validTs(r.EmailReceivedAt) || validTs(r.CreatedAt);
         const hasReply = r.HasCustomerResponse || r.HasCarrierResponse;
-        if(hasReply){
-            // Use the most recent of all available timestamps to find the actual reply time
+        if(hasReply || r.SlaExpired){
+            // Use the most recent of all available timestamps to find the actual activity time
             const replyTs = Math.max(
                 validTs(r.LastActivityAt),
                 validTs(r.SlaResponseAt),
@@ -2440,7 +2493,7 @@ async function setStatus(id, status){
         if(r) r._prevStatus = r.Status; // capture before change
         // Keep ReopenedFrom unless resolving (Completed, Not Related) or going back to Pending
         const clearReopened = status==='Completed'||status==='Not Related'||status.startsWith('Pending');
-        const fields = { Status: status, ReopenedFrom: clearReopened ? '' : (r?.ReopenedFrom||''), LastActivityAt: new Date().toISOString() };
+        const fields = { Status: status, ReopenedFrom: clearReopened ? '' : (r?.ReopenedFrom||''), LastActivityAt: new Date().toISOString(), SlaExpired: false };
         // Auto-archive 'Not Related' only
         if(status === 'Not Related'){
             fields.Archived = true;
@@ -2468,6 +2521,7 @@ async function setStatus(id, status){
             if(fields.HasCustomerResponse!==undefined) r.HasCustomerResponse=fields.HasCustomerResponse;
             if(fields.HasCarrierResponse!==undefined) r.HasCarrierResponse=fields.HasCarrierResponse;
             if(fields.SlaResponseAt!==undefined) r.SlaResponseAt=fields.SlaResponseAt;
+            if(fields.SlaExpired!==undefined) r.SlaExpired=fields.SlaExpired;
         }
         await appendActivityLog(id, 'Status changed to "'+status+'"');
         const CLOSED = ['Completed','Completed - Front','Delivered','Not Related','Merged'];
@@ -3014,6 +3068,7 @@ function buildPendingBadge(r){
     if(r.SlaResponseAt) dl = new Date(r.SlaResponseAt);
     else if(r.ModifiedAt) dl = addWorkingDays(2, new Date(r.ModifiedAt));
     const overdue = dl && now > dl;
+    const expired = !!r.SlaExpired; // SLA officially expired → back on the board
     // Count working days/hours remaining (not calendar days)
     let ageLabel = '';
     if(dl){
@@ -3026,11 +3081,16 @@ function buildPendingBadge(r){
             ageLabel = wd > 0 ? wd+'d' : (diffH > 0 ? diffH+'h' : '<1h');
         }
     }
-    const badgeStyle = overdue
-        ? 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca'
-        : 'background:#fef3c7;color:#d97706;border:1px solid #fde68a';
-    const icon = overdue ? '⚡' : '⏳';
-    const label = dl ? (overdue ? icon+' Overdue '+ageLabel : icon+' '+ageLabel+' left') : icon+' Pending';
+    const badgeStyle = expired
+        ? 'background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5'
+        : (overdue
+            ? 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca'
+            : 'background:#fef3c7;color:#d97706;border:1px solid #fde68a');
+    const icon = expired ? '🚨' : (overdue ? '⚡' : '⏳');
+    let label;
+    if(expired)       label = icon+' SLA Expired '+ageLabel;
+    else if(dl)       label = overdue ? icon+' Overdue '+ageLabel : icon+' '+ageLabel+' left';
+    else              label = icon+' Pending';
     return '<div style="margin-top:5px;display:flex;align-items:center;gap:4px;justify-content:center;flex-wrap:wrap">'
         + '<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap;'+badgeStyle+'">'+label+'</span>'
         + '<button onclick="event.stopPropagation();openExtendPending(\''+r.id+'\',this)" title="Extend deadline" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 5px;cursor:pointer;font-size:11px;color:#64748b">📅</button>'
@@ -3068,9 +3128,9 @@ async function saveExtendPending(id){
     const dl = new Date(date+'T17:00:00'); // end of business day
     try {
         await graph(`/sites/${CONFIG.siteHost},${CONFIG.siteId}/lists/${CONFIG.listId}/items/${id}/fields`,
-            { method:'PATCH', body:JSON.stringify({ SlaResponseAt: dl.toISOString() }) });
+            { method:'PATCH', body:JSON.stringify({ SlaResponseAt: dl.toISOString(), SlaExpired: false }) });
         const r = requests.find(x=>x.id===id);
-        if(r) r.SlaResponseAt = dl.toISOString();
+        if(r){ r.SlaResponseAt = dl.toISOString(); r.SlaExpired = false; }
         await appendActivityLog(id, 'Pending deadline extended to '+dl.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}));
         document.querySelectorAll('.extend-pending-picker').forEach(e=>e.remove());
         toast('Pending deadline extended','ok');
